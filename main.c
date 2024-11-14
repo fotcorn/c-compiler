@@ -66,10 +66,12 @@ void add_token(struct TokenArray *arr, struct Token token) {
 int lex(char *input, int length, struct TokenArray *tokens) {
     *tokens = create_token_array();
     int i = 0;
+    int line = 1;
 
     while (i < length) {
         // Skip whitespace
         while (i < length && (input[i] == ' ' || input[i] == '\n' || input[i] == '\t')) {
+            if (input[i] == '\n') line++;
             i++;
         }
         if (i >= length) break;
@@ -83,6 +85,7 @@ int lex(char *input, int length, struct TokenArray *tokens) {
             while (i < length && input[i] != '\n') {
                 i++;
             }
+            if (i < length && input[i] == '\n') line++;
             continue;
         }
 
@@ -144,7 +147,7 @@ int lex(char *input, int length, struct TokenArray *tokens) {
                 token.type = TOKEN_NOT_EQUAL;
                 i++;
             } else {
-                printf("Error: Expected '=' after '!' at position %d\n", i);
+                printf("Line %d: Error: Expected '=' after '!' at position %d\n", line, i);
                 return 1;
             }
         } else if (input[i] == '<') {
@@ -170,7 +173,7 @@ int lex(char *input, int length, struct TokenArray *tokens) {
                 token.type = TOKEN_LOGICAL_OR;
                 i++;
             } else {
-                printf("Error: Expected '|' after '|' at position %d\n", i);
+                printf("Line %d: Error: Expected '|' after '|' at position %d\n", line, i);
                 return 1;
             }
         }
@@ -180,7 +183,7 @@ int lex(char *input, int length, struct TokenArray *tokens) {
                 token.type = TOKEN_LOGICAL_AND;
                 i++;
             } else {
-                printf("Error: Expected '&' after '&' at position %d\n", i);
+                printf("Line %d: Error: Expected '&' after '&' at position %d\n", line, i);
                 return 1;
             }
         }
@@ -189,6 +192,7 @@ int lex(char *input, int length, struct TokenArray *tokens) {
             token.type = TOKEN_LITERAL_STRING;
             i++;
             while (i < length && input[i] != '"') {
+                if (input[i] == '\n') line++;
                 if (input[i] == '\\' && i + 1 < length) {
                     i += 2;
                 } else {
@@ -198,7 +202,7 @@ int lex(char *input, int length, struct TokenArray *tokens) {
             if (i < length && input[i] == '"') {
                 i++;
             } else {
-                printf("Error: Unterminated string at position %d\n", token.start);
+                printf("Line %d: Error: Unterminated string at position %d\n", line, token.start);
                 return 1;
             }
         }
@@ -214,7 +218,7 @@ int lex(char *input, int length, struct TokenArray *tokens) {
             if (i < length && input[i] == '\'') {
                 i++;
             } else {
-                printf("Error: Unterminated character literal at position %d\n", token.start);
+                printf("Line %d: Error: Unterminated character literal at position %d\n", line, token.start);
                 return 1;
             }
         }
@@ -248,7 +252,7 @@ int lex(char *input, int length, struct TokenArray *tokens) {
         }
         // Unexpected characters
         else {
-            printf("Error: Unexpected character '%c' at position %d\n", input[i], i);
+            printf("Line %d: Error: Unexpected character '%c' at position %d\n", line, input[i], i);
             return 1;
         }
 
