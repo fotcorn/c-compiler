@@ -7,28 +7,33 @@ int TOKEN_LEFT_BRACE = 1;
 int TOKEN_RIGHT_BRACE = 2;
 int TOKEN_LEFT_PAREN = 3;
 int TOKEN_RIGHT_PAREN = 4;
-int TOKEN_LITERAL_INT = 5;
-int TOKEN_LITERAL_CHAR = 6;
-int TOKEN_LITERAL_STRING = 7;
-int TOKEN_IDENTIFIER = 8;
-int TOKEN_RETURN = 9;
-int TOKEN_IF = 10;
-int TOKEN_ELSE = 11;
-int TOKEN_WHILE = 12;
-int TOKEN_STRUCT = 13;
-int TOKEN_SEMICOLON = 14;
-int TOKEN_COMMA = 15;
-int TOKEN_PLUS = 16;
-int TOKEN_MINUS = 17;
-int TOKEN_MULTIPLY = 18;
-int TOKEN_DIVIDE = 19;
-int TOKEN_EQUAL = 20;
-int TOKEN_EQUAL_EQUAL = 21;
-int TOKEN_NOT_EQUAL = 22;
-int TOKEN_LESS = 23;
-int TOKEN_LESS_EQUAL = 24;
-int TOKEN_GREATER = 25;
-int TOKEN_GREATER_EQUAL = 26;
+int TOKEN_LEFT_BRACKET = 5;
+int TOKEN_RIGHT_BRACKET = 6;
+int TOKEN_LITERAL_INT = 7;
+int TOKEN_LITERAL_CHAR = 8;
+int TOKEN_LITERAL_STRING = 9;
+int TOKEN_IDENTIFIER = 10;
+int TOKEN_RETURN = 11;
+int TOKEN_IF = 12;
+int TOKEN_ELSE = 13;
+int TOKEN_WHILE = 14;
+int TOKEN_STRUCT = 15;
+int TOKEN_SEMICOLON = 16;
+int TOKEN_COMMA = 17;
+int TOKEN_PLUS = 18;
+int TOKEN_MINUS = 19;
+int TOKEN_MULTIPLY = 20;
+int TOKEN_DIVIDE = 21;
+int TOKEN_EQUAL = 22;
+int TOKEN_EQUAL_EQUAL = 23;
+int TOKEN_NOT_EQUAL = 24;
+int TOKEN_LESS = 25;
+int TOKEN_LESS_EQUAL = 26;
+int TOKEN_GREATER = 27;
+int TOKEN_GREATER_EQUAL = 28;
+int TOKEN_PERIOD = 29;
+int TOKEN_LOGICAL_OR = 30;
+int TOKEN_LOGICAL_AND = 31;
 
 struct Token {
     int type;
@@ -100,6 +105,15 @@ int lex(char *input, int length, struct TokenArray *tokens) {
         } else if (input[i] == ',') {
             token.type = TOKEN_COMMA;
             i++;
+        } else if (input[i] == '.') {
+            token.type = TOKEN_PERIOD;
+            i++;
+        } else if (input[i] == '[') {
+            token.type = TOKEN_LEFT_BRACKET;
+            i++;
+        } else if (input[i] == ']') {
+            token.type = TOKEN_RIGHT_BRACKET;
+            i++;
         }
         // Arithmetic operators
         else if (input[i] == '+') {
@@ -148,6 +162,26 @@ int lex(char *input, int length, struct TokenArray *tokens) {
                 i++;
             } else {
                 token.type = TOKEN_GREATER;
+            }
+        }
+        else if (input[i] == '|') {
+            i++;
+            if (i < length && input[i] == '|') {
+                token.type = TOKEN_LOGICAL_OR;
+                i++;
+            } else {
+                printf("Error: Expected '|' after '|' at position %d\n", i);
+                return 1;
+            }
+        }
+        else if (input[i] == '&') {
+            i++;
+            if (i < length && input[i] == '&') {
+                token.type = TOKEN_LOGICAL_AND;
+                i++;
+            } else {
+                printf("Error: Expected '&' after '&' at position %d\n", i);
+                return 1;
             }
         }
         // String literals
@@ -318,6 +352,16 @@ int main() {
             printf("while\n");
         } else if (token.type == TOKEN_STRUCT) {
             printf("struct\n");
+        } else if (token.type == TOKEN_PERIOD) {
+            printf(".\n");
+        } else if (token.type == TOKEN_LOGICAL_OR) {
+            printf("||\n");
+        } else if (token.type == TOKEN_LOGICAL_AND) {
+            printf("&&\n");
+        } else if (token.type == TOKEN_LEFT_BRACKET) {
+            printf("[\n");
+        } else if (token.type == TOKEN_RIGHT_BRACKET) {
+            printf("]\n");
         } else {
             printf("OTHER TOKEN TYPE %d\n", token.type);
         }
