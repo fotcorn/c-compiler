@@ -131,7 +131,7 @@ struct TokenArray lex(char *input, int length) {
                 i++;
             } else {
                 printf("Error: Expected '=' after '!' at position %d\n", i);
-                continue;
+                break;
             }
         } else if (input[i] == '<') {
             i++;
@@ -165,6 +165,7 @@ struct TokenArray lex(char *input, int length) {
                 i++;
             } else {
                 printf("Error: Unterminated string at position %d\n", token.start);
+                break;
             }
         }
         // Character literals
@@ -180,6 +181,7 @@ struct TokenArray lex(char *input, int length) {
                 i++;
             } else {
                 printf("Error: Unterminated character literal at position %d\n", token.start);
+                break;
             }
         }
         // Numbers
@@ -214,7 +216,7 @@ struct TokenArray lex(char *input, int length) {
         else {
             printf("Error: Unexpected character '%c' at position %d\n", input[i], i);
             i++;
-            continue;
+            break;
         }
 
         token.end = i;
@@ -225,7 +227,97 @@ struct TokenArray lex(char *input, int length) {
 }
 
 int main() {
-    char *input = "int main() { return 0; }";
+    char *input = NULL;
+    size_t capacity = 0;
+    size_t length = 0;
+    char buffer[1024];
+    
+    while (fgets(buffer, sizeof(buffer), stdin) != NULL) {
+        size_t chunk_len = strlen(buffer);
+        if (length + chunk_len + 1 > capacity) {
+            capacity = capacity == 0 ? 1024 : capacity * 2;
+            input = realloc(input, capacity);
+            if (input == NULL) {
+                printf("Error: memory allocation failed\n");
+                return 1;
+            }
+        }
+        strcpy(input + length, buffer);
+        length += chunk_len;
+    }
+    
+    if (input == NULL) {
+        printf("Error: no input received\n");
+        return 1;
+    }
     struct TokenArray tokens = lex(input, strlen(input));
+
+    int i = 0;
+    while (i < tokens.count) {
+        struct Token token = tokens.tokens[i];
+        printf("Token %d: ", i);
+        
+        if (token.type == TOKEN_IDENTIFIER || token.type == TOKEN_LITERAL_INT || token.type == TOKEN_LITERAL_STRING) {
+            int len = token.end - token.start;
+            char content[256];
+            strncpy(content, &input[token.start], len);
+            content[len] = '\0';
+            
+            if (token.type == TOKEN_IDENTIFIER) {
+                printf("IDENTIFIER '%s'\n", content);
+            } else if (token.type == TOKEN_LITERAL_INT) {
+                printf("INTEGER %s\n", content); 
+            } else {
+                printf("STRING '%s'\n", content);
+            }
+        } else if (token.type == TOKEN_LEFT_BRACE) {
+            printf("{\n");
+        } else if (token.type == TOKEN_RIGHT_BRACE) {
+            printf("}\n");
+        } else if (token.type == TOKEN_LEFT_PAREN) {
+            printf("(\n");
+        } else if (token.type == TOKEN_RIGHT_PAREN) {
+            printf(")\n");
+        } else if (token.type == TOKEN_SEMICOLON) {
+            printf(";\n");
+        } else if (token.type == TOKEN_COMMA) {
+            printf(",\n");
+        } else if (token.type == TOKEN_PLUS) {
+            printf("+\n");
+        } else if (token.type == TOKEN_MINUS) {
+            printf("-\n");
+        } else if (token.type == TOKEN_MULTIPLY) {
+            printf("*\n");
+        } else if (token.type == TOKEN_DIVIDE) {
+            printf("/\n");
+        } else if (token.type == TOKEN_EQUAL) {
+            printf("=\n");
+        } else if (token.type == TOKEN_EQUAL_EQUAL) {
+            printf("==\n");
+        } else if (token.type == TOKEN_NOT_EQUAL) {
+            printf("!=\n");
+        } else if (token.type == TOKEN_LESS) {
+            printf("<\n");
+        } else if (token.type == TOKEN_LESS_EQUAL) {
+            printf("<=\n");
+        } else if (token.type == TOKEN_GREATER) {
+            printf(">\n");
+        } else if (token.type == TOKEN_GREATER_EQUAL) {
+            printf(">=\n");
+        } else if (token.type == TOKEN_RETURN) {
+            printf("return\n");
+        } else if (token.type == TOKEN_IF) {
+            printf("if\n");
+        } else if (token.type == TOKEN_ELSE) {
+            printf("else\n");
+        } else if (token.type == TOKEN_WHILE) {
+            printf("while\n");
+        } else if (token.type == TOKEN_STRUCT) {
+            printf("struct\n");
+        } else {
+            printf("OTHER TOKEN TYPE %d\n", token.type);
+        }
+        i++;
+    }
     return 0;
 }
