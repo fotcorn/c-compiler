@@ -12,6 +12,7 @@ No modifiers like const, volatile, register etc.
 * arithmetic: +, -, *, /
 * assignment: =
 * comparison: ==, !=, >, <, >=, <=
+* logical: &&, ||
 
 We don't support increment/decrement operators.
 Only simple assigment, no compound assignment.
