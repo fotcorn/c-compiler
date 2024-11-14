@@ -272,7 +272,11 @@ int main() {
     while (fgets(buffer, sizeof(buffer), stdin) != NULL) {
         size_t chunk_len = strlen(buffer);
         if (length + chunk_len + 1 > capacity) {
-            capacity = capacity == 0 ? 1024 : capacity * 2;
+            if (capacity == 0) {
+                capacity = 1024;
+            } else {
+                capacity = capacity * 2;
+            }
             input = realloc(input, capacity);
             if (input == NULL) {
                 printf("Error: memory allocation failed\n");
