@@ -58,8 +58,8 @@ void add_token(struct TokenArray *arr, struct Token token) {
     arr->tokens[arr->count++] = token;
 }
 
-struct TokenArray lex(char *input, int length) {
-    struct TokenArray tokens = create_token_array();
+int lex(char *input, int length, struct TokenArray *tokens) {
+    *tokens = create_token_array();
     int i = 0;
 
     while (i < length) {
@@ -131,7 +131,7 @@ struct TokenArray lex(char *input, int length) {
                 i++;
             } else {
                 printf("Error: Expected '=' after '!' at position %d\n", i);
-                break;
+                return 1;
             }
         } else if (input[i] == '<') {
             i++;
@@ -165,7 +165,7 @@ struct TokenArray lex(char *input, int length) {
                 i++;
             } else {
                 printf("Error: Unterminated string at position %d\n", token.start);
-                break;
+                return 1;
             }
         }
         // Character literals
@@ -181,7 +181,7 @@ struct TokenArray lex(char *input, int length) {
                 i++;
             } else {
                 printf("Error: Unterminated character literal at position %d\n", token.start);
-                break;
+                return 1;
             }
         }
         // Numbers
@@ -215,15 +215,14 @@ struct TokenArray lex(char *input, int length) {
         // Unexpected characters
         else {
             printf("Error: Unexpected character '%c' at position %d\n", input[i], i);
-            i++;
-            break;
+            return 1;
         }
 
         token.end = i;
-        add_token(&tokens, token);
+        add_token(tokens, token);
     }
 
-    return tokens;
+    return 0;
 }
 
 int main() {
@@ -250,7 +249,12 @@ int main() {
         printf("Error: no input received\n");
         return 1;
     }
-    struct TokenArray tokens = lex(input, strlen(input));
+    struct TokenArray tokens;
+    int status = lex(input, strlen(input), &tokens);
+    if (status != 0) {
+        free(input);
+        return 1;
+    }
 
     int i = 0;
     while (i < tokens.count) {
