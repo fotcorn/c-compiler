@@ -34,6 +34,7 @@ int TOKEN_GREATER_EQUAL = 28;
 int TOKEN_PERIOD = 29;
 int TOKEN_LOGICAL_OR = 30;
 int TOKEN_LOGICAL_AND = 31;
+int TOKEN_AMPERSAND = 32;
 
 struct Token {
     int type;
@@ -183,8 +184,7 @@ int lex(char *input, int length, struct TokenArray *tokens) {
                 token.type = TOKEN_LOGICAL_AND;
                 i++;
             } else {
-                printf("Line %d: Error: Expected '&' after '&' at position %d\n", line, i);
-                return 1;
+                token.type = TOKEN_AMPERSAND;
             }
         }
         // String literals
@@ -366,6 +366,8 @@ int main() {
             printf("[\n");
         } else if (token.type == TOKEN_RIGHT_BRACKET) {
             printf("]\n");
+        } else if (token.type == TOKEN_AMPERSAND) {
+            printf("&\n");
         } else {
             printf("OTHER TOKEN TYPE %d\n", token.type);
         }
