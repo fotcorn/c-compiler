@@ -20,5 +20,29 @@ struct Token {
     int end;
 };
 
-void lex(char *input, int length) {
+struct TokenArray {
+    struct Token *tokens;
+    int capacity;
+    int count;
+};
+
+struct TokenArray create_token_array() {
+    struct TokenArray arr;
+    arr.capacity = 8;
+    arr.count = 0;
+    arr.tokens = malloc(arr.capacity * sizeof(struct Token));
+    return arr;
+}
+
+void add_token(struct TokenArray *arr, struct Token token) {
+    if (arr->count >= arr->capacity) {
+        arr->capacity *= 2;
+        arr->tokens = realloc(arr->tokens, arr->capacity * sizeof(struct Token));
+    }
+    arr->tokens[arr->count++] = token;
+}
+
+struct TokenArray lex(char *input, int length) {
+    struct TokenArray tokens = create_token_array();
+    return tokens;
 }
