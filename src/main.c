@@ -4,7 +4,7 @@
 
 #include "lexer.h"
 
-int main() {
+int main(void) {
     char *input = NULL;
     size_t capacity = 0;
     size_t length = 0;

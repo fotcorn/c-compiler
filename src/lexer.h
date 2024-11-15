@@ -5,7 +5,7 @@
 
 #include "tokens.h"
 
-struct TokenArray create_token_array() {
+struct TokenArray create_token_array(void) {
     struct TokenArray arr;
     arr.capacity = 8;
     arr.count = 0;
