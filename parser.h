@@ -1,6 +1,13 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include "tokens.h"
+
+// Add string storage
+struct String {
+    char *chars;
+    int length;
+};
 
 // AST node types
 enum NodeType {
@@ -75,12 +82,6 @@ static struct ASTNode* create_node(enum NodeType type) {
     return node;
 }
 
-// Add string storage
-struct String {
-    char *chars;
-    int length;
-};
-
 // Create a new string
 static struct String create_string(const char *start, int length) {
     char *chars = malloc(length + 1);
@@ -139,12 +140,16 @@ static void print_ast(struct ASTNode *node, int level) {
             
         case NODE_BINARY_OP:
             printf("BinaryOp: ");
-            switch (node->value) {
-                case TOKEN_PLUS: printf("+\n"); break;
-                case TOKEN_MINUS: printf("-\n"); break;
-                case TOKEN_MULTIPLY: printf("*\n"); break;
-                case TOKEN_DIVIDE: printf("/\n"); break;
-                default: printf("unknown\n");
+            if (node->value == TOKEN_PLUS) {
+                printf("+\n");
+            } else if (node->value == TOKEN_MINUS) {
+                printf("-\n");
+            } else if (node->value == TOKEN_MULTIPLY) {
+                printf("*\n");
+            } else if (node->value == TOKEN_DIVIDE) {
+                printf("/\n");
+            } else {
+                printf("unknown\n");
             }
             print_ast(node->left, level + 1);
             print_ast(node->right, level + 1);

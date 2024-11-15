@@ -1,3 +1,5 @@
+#pragma once
+
 int TOKEN_LEFT_BRACE = 1;
 int TOKEN_RIGHT_BRACE = 2;
 int TOKEN_LEFT_PAREN = 3;
