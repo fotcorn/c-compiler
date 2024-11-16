@@ -46,10 +46,6 @@ struct ASTNode* parse_term(struct Parser *parser);
 struct ASTNode* parse_factor(struct Parser *parser);
 
 // Helper functions
-static struct Token peek(struct Parser *parser) {
-    return parser->tokens->tokens[parser->current];
-}
-
 static struct Token advance(struct Parser *parser) {
     struct Token token = parser->tokens->tokens[parser->current];
     parser->current++;
