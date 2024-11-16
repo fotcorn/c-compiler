@@ -72,7 +72,7 @@ static int check(struct Parser *parser, int type) {
 
 // Create a new AST node
 static struct ASTNode* create_node(enum NodeType type) {
-    struct ASTNode* node = malloc(sizeof(struct ASTNode));
+    struct ASTNode* node = (struct ASTNode*)malloc(sizeof(struct ASTNode));
     node->type = type;
     node->left = NULL;
     node->right = NULL;
@@ -84,7 +84,7 @@ static struct ASTNode* create_node(enum NodeType type) {
 
 // Create a new string
 static struct String create_string(const char *start, int length) {
-    char *chars = malloc(length + 1);
+    char *chars = (char*)malloc(length + 1);
     memcpy(chars, start, length);
     chars[length] = '\0';
     return (struct String){chars, length};

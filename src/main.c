@@ -3,6 +3,7 @@
 #include <string.h>
 
 #include "lexer.h"
+#include "parser.h"
 
 int main(void) {
     char *input = NULL;
@@ -39,6 +40,19 @@ int main(void) {
         return 1;
     }
 
+    printf("Tokens:\n");
+    print_tokens(tokens, input);
+    printf("\n");
+
+    status = parse(&tokens, input);
+    if (status != 0) {
+        fprintf(stderr, "Parsing failed\n");
+        free(input);
+        free(tokens.tokens);
+        return 1;
+    }
+
+    free(tokens.tokens);
     free(input);
     return 0;
 }
