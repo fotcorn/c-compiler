@@ -51,14 +51,21 @@ int main(int argc, char *argv[]) {
     print_tokens(tokens, input);
     printf("\n");
 
-    status = parse(&tokens, input);
-    if (status != 0) {
+    // Call the parser
+    struct ASTNode *ast = parse(&tokens);
+    if (!ast) {
         fprintf(stderr, "Parsing failed\n");
         free(tokens.tokens);
         free(input);
         return 1;
     }
 
+    // Print the AST
+    printf("AST:\n");
+    print_ast(ast, 0);
+
+    // Free resources
+    free_ast(ast);
     free(tokens.tokens);
     free(input);
     return 0;

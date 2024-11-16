@@ -1,409 +1,418 @@
+#include "tokens.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "tokens.h"
-
-// Add string storage
-struct String {
-    char *chars;
-    int length;
-};
 
 // AST node types
-enum NodeType {
-    NODE_FUNCTION,
-    NODE_BLOCK,
-    NODE_VAR_DECL,
-    NODE_ASSIGNMENT,
-    NODE_BINARY_OP,
-    NODE_INTEGER,
-    NODE_IDENTIFIER
-};
+int NODE_PROGRAM = 1;
+int NODE_FUNCTION_DECLARATION = 2;
+int NODE_VARIABLE_DECLARATION = 3;
+int NODE_BINARY_OPERATION = 4;
+int NODE_INTEGER_LITERAL = 5;
+int NODE_IDENTIFIER = 6;
+int NODE_FUNCTION_CALL = 7;
+int NODE_RETURN_STATEMENT = 8;
+
+// Forward declaration of ASTNode
+struct ASTNode;
 
 // AST node structure
 struct ASTNode {
-    enum NodeType type;
-    struct ASTNode *left;
-    struct ASTNode *right;
-    int value;          // for integers
-    struct String identifier;   // for variables and function names
-    struct ASTNode *next;  // for statement lists in blocks
+    int type;
+    union {
+        // Function declaration
+        struct {
+            char *name;
+            struct ASTNode *body;
+        } function_decl;
+
+        // Variable declaration
+        struct {
+            char *datatype;
+            char *name;
+            struct ASTNode *value;
+        } var_decl;
+
+        // Binary operation
+        struct {
+            char *operator;
+            struct ASTNode *left;
+            struct ASTNode *right;
+        } binary_op;
+
+        // Integer literal
+        struct {
+            int value;
+        } int_literal;
+
+        // Identifier
+        struct {
+            char *name;
+        } identifier;
+
+        // Function call
+        struct {
+            char *name;
+            struct ASTNode *arguments;
+        } func_call;
+
+        // Return statement
+        struct {
+            struct ASTNode *value;
+        } return_stmt;
+    };
+    struct ASTNode *next; // For linked list of statements
 };
+
 
 // Parser state
 struct Parser {
     struct TokenArray *tokens;
-    int current;
-    const char *source;  // Add source text
+    int position;
+    const char *input; // Source code input string
 };
 
 // Forward declarations
-struct ASTNode* parse_function(struct Parser *parser);
-struct ASTNode* parse_block(struct Parser *parser);
-struct ASTNode* parse_statement(struct Parser *parser);
-struct ASTNode* parse_expression(struct Parser *parser);
-struct ASTNode* parse_term(struct Parser *parser);
-struct ASTNode* parse_factor(struct Parser *parser);
+static struct ASTNode *parse_program(struct Parser *parser);
+static struct ASTNode *parse_function_declaration(struct Parser *parser);
+static struct ASTNode *parse_statement(struct Parser *parser);
+static struct ASTNode *parse_expression(struct Parser *parser);
+static struct ASTNode *parse_factor(struct Parser *parser);
+static struct ASTNode *parse_primary(struct Parser *parser);
+static int match(struct Parser *parser, int token_type);
+static struct Token *peek(struct Parser *parser);
+static struct Token *previous(struct Parser *parser);
+static struct Token *advance(struct Parser *parser);
+static int is_at_end(struct Parser *parser);
+static void expect(struct Parser *parser, int token_type, const char *message);
 
-// Helper functions
-static struct Token advance(struct Parser *parser) {
-    struct Token token = parser->tokens->tokens[parser->current];
-    parser->current++;
-    return token;
+// Implement the parse function
+struct ASTNode *parse(struct TokenArray *tokens) {
+    struct Parser parser;
+    parser.tokens = tokens;
+    parser.position = 0;
+    parser.input = NULL; // Assume input is global or passed if needed
+    return parse_program(&parser);
 }
 
-static int match(struct Parser *parser, int type) {
-    if (parser->current >= parser->tokens->count) return 0;
-    if (parser->tokens->tokens[parser->current].type == type) {
-        parser->current++;
-        return 1;
+// Parse a program (list of functions)
+static struct ASTNode *parse_program(struct Parser *parser) {
+    struct ASTNode *node = NULL;
+    struct ASTNode **current = &node;
+
+    while (!is_at_end(parser)) {
+        struct ASTNode *func_decl = parse_function_declaration(parser);
+        if (func_decl) {
+            *current = func_decl;
+            current = &((*current)->next);
+        } else {
+            // Error handling could be improved
+            printf("Error: Expected function declaration.\n");
+            exit(1);
+        }
     }
-    return 0;
-}
 
-static int check(struct Parser *parser, int type) {
-    if (parser->current >= parser->tokens->count) return 0;
-    return parser->tokens->tokens[parser->current].type == type;
-}
-
-// Create a new AST node
-static struct ASTNode* create_node(enum NodeType type) {
-    struct ASTNode* node = (struct ASTNode*)malloc(sizeof(struct ASTNode));
-    node->type = type;
-    node->left = NULL;
-    node->right = NULL;
-    node->value = 0;
-    node->identifier = (struct String){NULL, 0};
-    node->next = NULL;
     return node;
 }
 
-// Create a new string
-static struct String create_string(const char *start, int length) {
-    char *chars = (char*)malloc(length + 1);
-    memcpy(chars, start, length);
-    chars[length] = '\0';
-    return (struct String){chars, length};
-}
-
-// Free AST
-static void free_ast(struct ASTNode *node) {
-    if (node == NULL) return;
-    
-    free_ast(node->left);
-    free_ast(node->right);
-    free_ast(node->next);
-    free(node->identifier.chars);
-    free(node);
-}
-
-// Print indentation
-static void print_indent(int level) {
-    for (int i = 0; i < level; i++) {
-        printf("  ");
+// Parse a function declaration
+static struct ASTNode *parse_function_declaration(struct Parser *parser) {
+    // Match 'int' or other datatype
+    if (!match(parser, TOKEN_IDENTIFIER)) {
+        return NULL;
     }
-}
+    struct Token *type_token = advance(parser);
 
-// Print AST recursively
-static void print_ast(struct ASTNode *node, int level) {
-    if (node == NULL) return;
-    
-    print_indent(level);
-    
-    switch (node->type) {
-        case NODE_FUNCTION:
-            printf("Function: %s\n", node->identifier.chars);
-            print_ast(node->left, level + 1);  // print body
-            break;
-            
-        case NODE_BLOCK:
-            printf("Block:\n");
-            struct ASTNode *stmt = node;
-            while (stmt != NULL) {
-                print_ast(stmt, level + 1);
-                stmt = stmt->next;
-            }
-            break;
-            
-        case NODE_VAR_DECL:
-            printf("VarDecl: %s\n", node->identifier.chars);
-            break;
-            
-        case NODE_ASSIGNMENT:
-            printf("Assign: %s =\n", node->identifier.chars);
-            print_ast(node->right, level + 1);
-            break;
-            
-        case NODE_BINARY_OP:
-            printf("BinaryOp: ");
-            if (node->value == TOKEN_PLUS) {
-                printf("+\n");
-            } else if (node->value == TOKEN_MINUS) {
-                printf("-\n");
-            } else if (node->value == TOKEN_MULTIPLY) {
-                printf("*\n");
-            } else if (node->value == TOKEN_DIVIDE) {
-                printf("/\n");
-            } else {
-                printf("unknown\n");
-            }
-            print_ast(node->left, level + 1);
-            print_ast(node->right, level + 1);
-            break;
-            
-        case NODE_INTEGER:
-            printf("Integer: %d\n", node->value);
-            break;
-            
-        case NODE_IDENTIFIER:
-            printf("Identifier: %s\n", node->identifier.chars);
-            break;
-            
-        default:
-            printf("Unknown node type: %d\n", node->type);
-    }
-}
+    // Extract the datatype
+    char *datatype = strndup(&parser->input[type_token->start], type_token->end - type_token->start);
 
-// Main parse function
-int parse(struct TokenArray *tokens, const char *source) {
-    struct Parser parser = {tokens, 0, source};
-    struct ASTNode* ast = parse_function(&parser);
-    
-    // Validate and print AST
-    if (ast == NULL) {
-        fprintf(stderr, "Parsing failed\n");
-        return 1;
-    }
-    
-    printf("\nAbstract Syntax Tree:\n");
-    print_ast(ast, 0);
-    printf("\n");
-    
-    free_ast(ast);
-    return 0;
-}
+    // Match function name (e.g., 'main')
+    expect(parser, TOKEN_IDENTIFIER, "Expected function name.");
+    struct Token *name_token = previous(parser);
+    char *func_name = strndup(&parser->input[name_token->start], name_token->end - name_token->start);
 
-// Parse a function definition
-struct ASTNode* parse_function(struct Parser *parser) {
-    struct ASTNode* node = create_node(NODE_FUNCTION);
-    
-    // Parse identifier (function name)
-    if (match(parser, TOKEN_IDENTIFIER)) {
-        struct Token token = parser->tokens->tokens[parser->current - 1];
-        node->identifier = create_string(
-            parser->source + token.start,
-            token.end - token.start
-        );
-        
-        if (!match(parser, TOKEN_LEFT_PAREN)) {
-            fprintf(stderr, "Expected '(' after function name\n");
-            return NULL;
-        }
-        
-        if (!match(parser, TOKEN_RIGHT_PAREN)) {
-            fprintf(stderr, "Expected ')' after parameters\n");
-            return NULL;
-        }
-        
-        if (!match(parser, TOKEN_LEFT_BRACE)) {
-            fprintf(stderr, "Expected '{' to begin function body\n");
-            return NULL;
-        }
-        
-        node->left = parse_block(parser);
-        
-        if (!match(parser, TOKEN_RIGHT_BRACE)) {
-            fprintf(stderr, "Expected '}' to end function body\n");
-            return NULL;
-        }
-        
-        return node;
-    }
-    
-    fprintf(stderr, "Expected function name\n");
-    return NULL;
-}
+    // Match '(' ')'
+    expect(parser, TOKEN_LEFT_PAREN, "Expected '(' after function name.");
+    expect(parser, TOKEN_RIGHT_PAREN, "Expected ')' after '('.");
 
-// Parse a block of statements
-struct ASTNode* parse_block(struct Parser *parser) {
-    struct ASTNode* first = NULL;
-    struct ASTNode* current = NULL;
-    
-    while (!check(parser, TOKEN_RIGHT_BRACE)) {
-        struct ASTNode* stmt = parse_statement(parser);
-        if (stmt == NULL) {
-            if (first) free_ast(first);
-            return NULL;
-        }
-        
-        if (first == NULL) {
-            first = stmt;
-            current = stmt;
+    // Match '{'
+    expect(parser, TOKEN_LEFT_BRACE, "Expected '{' before function body.");
+
+    // Parse function body
+    struct ASTNode *body = NULL;
+    struct ASTNode **current = &body;
+
+    while (!is_at_end(parser) && !match(parser, TOKEN_RIGHT_BRACE)) {
+        struct ASTNode *stmt = parse_statement(parser);
+        if (stmt) {
+            *current = stmt;
+            current = &((*current)->next);
         } else {
-            current->next = stmt;
-            current = stmt;
+            // Error handling could be improved
+            printf("Error: Invalid statement in function body.\n");
+            exit(1);
         }
     }
-    
-    return first;
+
+    // Match '}'
+    expect(parser, TOKEN_RIGHT_BRACE, "Expected '}' after function body.");
+
+    // Create function declaration node
+    struct ASTNode *node = malloc(sizeof(struct ASTNode));
+    node->type = NODE_FUNCTION_DECLARATION;
+    node->function_decl.name = func_name;
+    node->function_decl.body = body;
+    node->next = NULL;
+
+    free(datatype); // In this simple parser, we don't use the datatype
+
+    return node;
 }
 
 // Parse a statement
-struct ASTNode* parse_statement(struct Parser *parser) {
-    // Variable declaration: int identifier;
-    if (check(parser, TOKEN_IDENTIFIER)) {
-        struct Token token = parser->tokens->tokens[parser->current];
-        // Check if token text is "int"
-        int len = token.end - token.start;
-        if (len == 3 && strncmp(parser->source + token.start, "int", 3) == 0) {
-            advance(parser); // consume 'int'
-            
-            struct ASTNode* node = create_node(NODE_VAR_DECL);
-            
-            if (!match(parser, TOKEN_IDENTIFIER)) {
-                fprintf(stderr, "Expected variable name\n");
-                free_ast(node);
-                return NULL;
-            }
-            
-            struct Token id_token = parser->tokens->tokens[parser->current - 1];
-            node->identifier = create_string(
-                parser->source + id_token.start, 
-                id_token.end - id_token.start
-            );
-            
-            if (!match(parser, TOKEN_SEMICOLON)) {
-                fprintf(stderr, "Expected semicolon after variable declaration\n");
-                free_ast(node);
-                return NULL;
-            }
-            
+static struct ASTNode *parse_statement(struct Parser *parser) {
+    // Variable declaration or expression statement
+    if (match(parser, TOKEN_IDENTIFIER)) {
+        struct Token *type_token = peek(parser);
+
+        // Check if next token is an identifier (variable name)
+        if (parser->position + 1 < parser->tokens->count &&
+            parser->tokens->tokens[parser->position + 1].type == TOKEN_IDENTIFIER) {
+            // Variable declaration
+            advance(parser); // Consume datatype
+            struct Token *datatype_token = type_token;
+            char *datatype = strndup(&parser->input[datatype_token->start], datatype_token->end - datatype_token->start);
+
+            // Variable name
+            expect(parser, TOKEN_IDENTIFIER, "Expected variable name.");
+            struct Token *name_token = previous(parser);
+            char *var_name = strndup(&parser->input[name_token->start], name_token->end - name_token->start);
+
+            // Match '='
+            expect(parser, TOKEN_EQUAL, "Expected '=' after variable name.");
+
+            // Parse expression
+            struct ASTNode *value = parse_expression(parser);
+
+            // Match ';'
+            expect(parser, TOKEN_SEMICOLON, "Expected ';' after variable declaration.");
+
+            // Create variable declaration node
+            struct ASTNode *node = malloc(sizeof(struct ASTNode));
+            node->type = NODE_VARIABLE_DECLARATION;
+            node->var_decl.datatype = datatype;
+            node->var_decl.name = var_name;
+            node->var_decl.value = value;
+            node->next = NULL;
+
             return node;
         }
     }
-    
-    // Assignment: identifier = expression;
-    if (check(parser, TOKEN_IDENTIFIER)) {
-        struct Token id_token = advance(parser);
-        struct ASTNode* node = create_node(NODE_ASSIGNMENT);
-        node->identifier = create_string(
-            parser->source + id_token.start,
-            id_token.end - id_token.start
-        );
-        
-        if (!match(parser, TOKEN_EQUAL)) {
-            fprintf(stderr, "Expected '=' in assignment\n");
-            free_ast(node);
-            return NULL;
-        }
-        
-        node->right = parse_expression(parser);
-        if (node->right == NULL) {
-            free_ast(node);
-            return NULL;
-        }
-        
-        if (!match(parser, TOKEN_SEMICOLON)) {
-            fprintf(stderr, "Expected semicolon after assignment\n");
-            free_ast(node);
-            return NULL;
-        }
-        
+
+    // Return statement
+    if (match(parser, TOKEN_RETURN)) {
+        advance(parser); // Consume 'return'
+
+        // Parse expression
+        struct ASTNode *value = parse_expression(parser);
+
+        // Match ';'
+        expect(parser, TOKEN_SEMICOLON, "Expected ';' after return statement.");
+
+        // Create return statement node
+        struct ASTNode *node = malloc(sizeof(struct ASTNode));
+        node->type = NODE_RETURN_STATEMENT;
+        node->return_stmt.value = value;
+        node->next = NULL;
+
         return node;
     }
-    
+
     // Expression statement
-    struct ASTNode* expr = parse_expression(parser);
-    if (expr == NULL) return NULL;
-    
-    if (!match(parser, TOKEN_SEMICOLON)) {
-        fprintf(stderr, "Expected semicolon after expression\n");
-        free_ast(expr);
-        return NULL;
-    }
-    
+    struct ASTNode *expr = parse_expression(parser);
+
+    // Match ';'
+    expect(parser, TOKEN_SEMICOLON, "Expected ';' after expression.");
+
+    expr->next = NULL;
     return expr;
 }
 
-// Parse an expression
-struct ASTNode* parse_expression(struct Parser *parser) {
-    struct ASTNode* left = parse_term(parser);
-    if (left == NULL) return NULL;
-    
-    while (check(parser, TOKEN_PLUS) || check(parser, TOKEN_MINUS)) {
-        struct ASTNode* node = create_node(NODE_BINARY_OP);
-        node->value = advance(parser).type;
-        node->left = left;
-        
-        node->right = parse_term(parser);
-        if (node->right == NULL) {
-            free_ast(node);
-            return NULL;
-        }
-        
-        left = node;
-    }
-    
-    return left;
+// Parse an expression (handles binary operations)
+static struct ASTNode *parse_expression(struct Parser *parser) {
+    return parse_factor(parser);
 }
 
-// Parse a term
-struct ASTNode* parse_term(struct Parser *parser) {
-    struct ASTNode* left = parse_factor(parser);
-    if (left == NULL) return NULL;
-    
-    while (check(parser, TOKEN_MULTIPLY) || check(parser, TOKEN_DIVIDE)) {
-        struct ASTNode* node = create_node(NODE_BINARY_OP);
-        node->value = advance(parser).type;
-        node->left = left;
-        
-        node->right = parse_factor(parser);
-        if (node->right == NULL) {
-            free_ast(node);
-            return NULL;
-        }
-        
-        left = node;
+// Parse factors (handles '+', '-' operators)
+static struct ASTNode *parse_factor(struct Parser *parser) {
+    struct ASTNode *node = parse_primary(parser);
+
+    while (match(parser, TOKEN_PLUS) || match(parser, TOKEN_MINUS)) {
+        struct Token *op_token = advance(parser);
+        char operator = parser->input[op_token->start];
+
+        struct ASTNode *right = parse_primary(parser);
+
+        // Create binary operation node
+        struct ASTNode *bin_node = malloc(sizeof(struct ASTNode));
+        bin_node->type = NODE_BINARY_OPERATION;
+        bin_node->binary_op.operator = strndup(&operator, 1);
+        bin_node->binary_op.left = node;
+        bin_node->binary_op.right = right;
+        bin_node->next = NULL;
+
+        node = bin_node;
     }
-    
-    return left;
+
+    return node;
 }
 
-// Parse a factor
-struct ASTNode* parse_factor(struct Parser *parser) {
+// Parse primary expressions
+static struct ASTNode *parse_primary(struct Parser *parser) {
     if (match(parser, TOKEN_LITERAL_INT)) {
-        struct Token token = parser->tokens->tokens[parser->current - 1];
-        struct ASTNode* node = create_node(NODE_INTEGER);
-        
-        // Convert token text to integer value
-        char temp[32];
-        int len = token.end - token.start;
-        strncpy(temp, parser->source + token.start, len);
-        temp[len] = '\0';
-        node->value = atoi(temp);
+        // Integer literal
+        struct Token *int_token = advance(parser);
+        int len = int_token->end - int_token->start;
+        char *value_str = strndup(&parser->input[int_token->start], len);
+        int value = atoi(value_str);
+        free(value_str);
+
+        struct ASTNode *node = malloc(sizeof(struct ASTNode));
+        node->type = NODE_INTEGER_LITERAL;
+        node->int_literal.value = value;
+        node->next = NULL;
+
         return node;
-    }
-    
-    if (match(parser, TOKEN_IDENTIFIER)) {
-        struct Token token = parser->tokens->tokens[parser->current - 1];
-        struct ASTNode* node = create_node(NODE_IDENTIFIER);
-        node->identifier = create_string(
-            parser->source + token.start,
-            token.end - token.start
-        );
-        return node;
-    }
-    
-    if (match(parser, TOKEN_LEFT_PAREN)) {
-        struct ASTNode* node = parse_expression(parser);
-        if (!match(parser, TOKEN_RIGHT_PAREN)) {
-            fprintf(stderr, "Expected ')'\n");
-            free_ast(node);
-            return NULL;
+    } else if (match(parser, TOKEN_IDENTIFIER)) {
+        struct Token *ident_token = advance(parser);
+        int len = ident_token->end - ident_token->start;
+        char *name = strndup(&parser->input[ident_token->start], len);
+
+        // Check if function call
+        if (match(parser, TOKEN_LEFT_PAREN)) {
+            advance(parser); // Consume '('
+
+            // For simplicity, we assume no arguments in function calls
+            expect(parser, TOKEN_RIGHT_PAREN, "Expected ')' after function call.");
+
+            struct ASTNode *node = malloc(sizeof(struct ASTNode));
+            node->type = NODE_FUNCTION_CALL;
+            node->func_call.name = name;
+            node->func_call.arguments = NULL;
+            node->next = NULL;
+
+            return node;
+        } else {
+            // Identifier
+            struct ASTNode *node = malloc(sizeof(struct ASTNode));
+            node->type = NODE_IDENTIFIER;
+            node->identifier.name = name;
+            node->next = NULL;
+
+            return node;
         }
-        return node;
+    } else {
+        printf("Error: Unexpected token in primary expression.\n");
+        exit(1);
     }
-    
-    fprintf(stderr, "Unexpected token in factor\n");
-    return NULL;
+}
+
+// Utility functions
+static int match(struct Parser *parser, int token_type) {
+    if (is_at_end(parser)) return 0;
+    return parser->tokens->tokens[parser->position].type == token_type;
+}
+
+static struct Token *advance(struct Parser *parser) {
+    if (!is_at_end(parser)) parser->position++;
+    return previous(parser);
+}
+
+static struct Token *peek(struct Parser *parser) {
+    if (is_at_end(parser)) return NULL;
+    return &parser->tokens->tokens[parser->position];
+}
+
+static struct Token *previous(struct Parser *parser) {
+    return &parser->tokens->tokens[parser->position - 1];
+}
+
+static int is_at_end(struct Parser *parser) {
+    return parser->position >= parser->tokens->count;
+}
+
+static void expect(struct Parser *parser, int token_type, const char *message) {
+    if (match(parser, token_type)) {
+        advance(parser);
+    } else {
+        printf("Error: %s\n", message);
+        exit(1);
+    }
+}
+
+// Function to print the AST
+void print_ast(struct ASTNode *node, int indent) {
+    while (node) {
+        for (int i = 0; i < indent; i++) printf("  ");
+        if (node->type == NODE_FUNCTION_DECLARATION) {
+            printf("FunctionDeclaration: %s\n", node->function_decl.name);
+            print_ast(node->function_decl.body, indent + 1);
+        } else if (node->type == NODE_VARIABLE_DECLARATION) {
+            printf("VariableDeclaration: %s %s\n", node->var_decl.datatype, node->var_decl.name);
+            if (node->var_decl.value) {
+                print_ast(node->var_decl.value, indent + 1);
+            }
+        } else if (node->type == NODE_BINARY_OPERATION) {
+            printf("BinaryOperation: %s\n", node->binary_op.operator);
+            print_ast(node->binary_op.left, indent + 1);
+            print_ast(node->binary_op.right, indent + 1);
+        } else if (node->type == NODE_INTEGER_LITERAL) {
+            printf("IntegerLiteral: %d\n", node->int_literal.value);
+        } else if (node->type == NODE_IDENTIFIER) {
+            printf("Identifier: %s\n", node->identifier.name);
+        } else if (node->type == NODE_FUNCTION_CALL) {
+            printf("FunctionCall: %s\n", node->func_call.name);
+        } else if (node->type == NODE_RETURN_STATEMENT) {
+            printf("ReturnStatement\n");
+            if (node->return_stmt.value) {
+                print_ast(node->return_stmt.value, indent + 1);
+            }
+        } else {
+            printf("Unknown node type\n");
+        }
+        node = node->next;
+    }
+}
+
+void free_ast(struct ASTNode *node) {
+    while (node) {
+        struct ASTNode *next = node->next;
+        
+        if (node->type == NODE_FUNCTION_DECLARATION) {
+            free(node->function_decl.name);
+            free_ast(node->function_decl.body);
+        } else if (node->type == NODE_VARIABLE_DECLARATION) {
+            free(node->var_decl.datatype);
+            free(node->var_decl.name);
+            if (node->var_decl.value) {
+                free_ast(node->var_decl.value);
+            }
+        } else if (node->type == NODE_BINARY_OPERATION) {
+            free(node->binary_op.operator);
+            free_ast(node->binary_op.left);
+            free_ast(node->binary_op.right);
+        } else if (node->type == NODE_IDENTIFIER) {
+            free(node->identifier.name);
+        } else if (node->type == NODE_FUNCTION_CALL) {
+            free(node->func_call.name);
+            free_ast(node->func_call.arguments);
+        } else if (node->type == NODE_RETURN_STATEMENT) {
+            if (node->return_stmt.value) {
+                free_ast(node->return_stmt.value);
+            }
+        }
+        
+        free(node);
+        node = next;
+    }
 }
