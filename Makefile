@@ -2,8 +2,9 @@ CC = gcc
 CFLAGS = -Wall -Wextra -pedantic -g
 
 TARGET = main
+HEADERS = src/lexer.h src/parser.h src/tokens.h
 
-$(TARGET): src/main.c
+$(TARGET): src/main.c $(HEADERS)
 	$(CC) $(CFLAGS) $< -o $@
 
 .PHONY: clean
