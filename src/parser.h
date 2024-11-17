@@ -12,6 +12,7 @@ int NODE_INTEGER_LITERAL = 5;
 int NODE_IDENTIFIER = 6;
 int NODE_FUNCTION_CALL = 7;
 int NODE_RETURN_STATEMENT = 8;
+int NODE_STRING_LITERAL = 9;
 
 // Forward declaration of ASTNode
 struct ASTNode;
@@ -60,6 +61,11 @@ struct ASTNode {
         struct {
             struct ASTNode *value;
         } return_stmt;
+
+        // String literal
+        struct {
+            char *value;
+        } string_literal;
     };
     struct ASTNode *next; // For linked list of statements
 };
@@ -286,6 +292,17 @@ static struct ASTNode *parse_primary(struct Parser *parser) {
         node->next = NULL;
 
         return node;
+    } else if (match(parser, TOKEN_LITERAL_STRING)) {
+        struct Token *str_token = advance(parser);
+        int len = str_token->end - str_token->start;
+        char *value = strndup(&parser->input[str_token->start], len);
+
+        struct ASTNode *node = malloc(sizeof(struct ASTNode));
+        node->type = NODE_STRING_LITERAL;
+        node->string_literal.value = value;
+        node->next = NULL;
+
+        return node;
     } else if (match(parser, TOKEN_IDENTIFIER)) {
         struct Token *ident_token = advance(parser);
         int len = ident_token->end - ident_token->start;
@@ -388,6 +405,8 @@ void print_ast(struct ASTNode *node, int indent) {
             if (node->return_stmt.value) {
                 print_ast(node->return_stmt.value, indent + 1);
             }
+        } else if (node->type == NODE_STRING_LITERAL) {
+            printf("StringLiteral: %s\n", node->string_literal.value);
         } else {
             printf("Unknown node type\n");
         }
@@ -421,6 +440,8 @@ void free_ast(struct ASTNode *node) {
             if (node->return_stmt.value) {
                 free_ast(node->return_stmt.value);
             }
+        } else if (node->type == NODE_STRING_LITERAL) {
+            free(node->string_literal.value);
         }
 
         free(node);
