@@ -87,11 +87,11 @@ static int is_at_end(struct Parser *parser);
 static void expect(struct Parser *parser, int token_type, const char *message);
 
 // Implement the parse function
-struct ASTNode *parse(struct TokenArray *tokens) {
+struct ASTNode *parse(struct TokenArray *tokens, char* input) {
     struct Parser parser;
     parser.tokens = tokens;
     parser.position = 0;
-    parser.input = NULL; // Assume input is global or passed if needed
+    parser.input = input;
     return parse_program(&parser);
 }
 

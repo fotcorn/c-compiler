@@ -52,7 +52,7 @@ int main(int argc, char *argv[]) {
     printf("\n");
 
     // Call the parser
-    struct ASTNode *ast = parse(&tokens);
+    struct ASTNode *ast = parse(&tokens, input);
     if (!ast) {
         fprintf(stderr, "Parsing failed\n");
         free(tokens.tokens);
