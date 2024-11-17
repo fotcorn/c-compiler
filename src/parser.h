@@ -85,6 +85,7 @@ static struct Token *previous(struct Parser *parser);
 static struct Token *advance(struct Parser *parser);
 static int is_at_end(struct Parser *parser);
 static void expect(struct Parser *parser, int token_type, const char *message);
+static struct ASTNode *parse_arguments(struct Parser *parser);
 
 // Implement the parse function
 struct ASTNode *parse(struct TokenArray *tokens, char* input) {
@@ -107,7 +108,7 @@ static struct ASTNode *parse_program(struct Parser *parser) {
             current = &((*current)->next);
         } else {
             struct Token *current_token = peek(parser);
-            printf("Error on line %d: Expected function declaration.\n", 
+            printf("Error on line %d: Expected function declaration.\n",
                    current_token ? current_token->line : 0);
             exit(1);
         }
@@ -294,13 +295,18 @@ static struct ASTNode *parse_primary(struct Parser *parser) {
         if (match(parser, TOKEN_LEFT_PAREN)) {
             advance(parser); // Consume '('
 
-            // For simplicity, we assume no arguments in function calls
-            expect(parser, TOKEN_RIGHT_PAREN, "Expected ')' after function call.");
+            // Parse arguments
+            struct ASTNode *arguments = NULL;
+            if (!match(parser, TOKEN_RIGHT_PAREN)) {
+                arguments = parse_arguments(parser);
+            }
+
+            expect(parser, TOKEN_RIGHT_PAREN, "Expected ')' after function arguments.");
 
             struct ASTNode *node = malloc(sizeof(struct ASTNode));
             node->type = NODE_FUNCTION_CALL;
             node->func_call.name = name;
-            node->func_call.arguments = NULL;
+            node->func_call.arguments = arguments;
             node->next = NULL;
 
             return node;
@@ -392,7 +398,7 @@ void print_ast(struct ASTNode *node, int indent) {
 void free_ast(struct ASTNode *node) {
     while (node) {
         struct ASTNode *next = node->next;
-        
+
         if (node->type == NODE_FUNCTION_DECLARATION) {
             free(node->function_decl.name);
             free_ast(node->function_decl.body);
@@ -416,8 +422,22 @@ void free_ast(struct ASTNode *node) {
                 free_ast(node->return_stmt.value);
             }
         }
-        
+
         free(node);
         node = next;
     }
+}
+
+static struct ASTNode *parse_arguments(struct Parser *parser) {
+    struct ASTNode *first_arg = parse_expression(parser);
+    struct ASTNode *current = first_arg;
+
+    while (match(parser, TOKEN_COMMA)) {
+        advance(parser); // Consume comma
+        struct ASTNode *next_arg = parse_expression(parser);
+        current->next = next_arg;
+        current = next_arg;
+    }
+
+    return first_arg;
 }
