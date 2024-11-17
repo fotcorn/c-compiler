@@ -1,9 +1,9 @@
+#include "common.h"
+
 #include <ctype.h>
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
-
-#include "tokens.h"
 
 struct TokenArray create_token_array(void) {
     struct TokenArray arr;

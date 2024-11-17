@@ -1,75 +1,8 @@
-#include "tokens.h"
+#include "common.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
-// AST node types
-int NODE_PROGRAM = 1;
-int NODE_FUNCTION_DECLARATION = 2;
-int NODE_VARIABLE_DECLARATION = 3;
-int NODE_BINARY_OPERATION = 4;
-int NODE_INTEGER_LITERAL = 5;
-int NODE_IDENTIFIER = 6;
-int NODE_FUNCTION_CALL = 7;
-int NODE_RETURN_STATEMENT = 8;
-int NODE_STRING_LITERAL = 9;
-
-// Forward declaration of ASTNode
-struct ASTNode;
-
-// AST node structure
-struct ASTNode {
-    int type;
-    union {
-        // Function declaration
-        struct {
-            char *name;
-            struct ASTNode *body;
-        } function_decl;
-
-        // Variable declaration
-        struct {
-            char *datatype;
-            char *name;
-            struct ASTNode *value;
-        } var_decl;
-
-        // Binary operation
-        struct {
-            char *operator;
-            struct ASTNode *left;
-            struct ASTNode *right;
-        } binary_op;
-
-        // Integer literal
-        struct {
-            int value;
-        } int_literal;
-
-        // Identifier
-        struct {
-            char *name;
-        } identifier;
-
-        // Function call
-        struct {
-            char *name;
-            struct ASTNode *arguments;
-        } func_call;
-
-        // Return statement
-        struct {
-            struct ASTNode *value;
-        } return_stmt;
-
-        // String literal
-        struct {
-            char *value;
-        } string_literal;
-    };
-    struct ASTNode *next; // For linked list of statements
-};
-
 
 // Parser state
 struct Parser {
