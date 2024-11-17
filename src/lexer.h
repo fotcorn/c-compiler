@@ -37,6 +37,7 @@ int lex(char *input, int length, struct TokenArray *tokens) {
         // Create token with current position
         struct Token token;
         token.start = i;
+        token.line = line;
 
         // Handle comments
         if (i + 1 < length && input[i] == '/' && input[i + 1] == '/') {

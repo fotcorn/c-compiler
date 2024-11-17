@@ -37,6 +37,7 @@ struct Token {
     int type;
     int start;
     int end;
+    int line;
 };
 
 struct TokenArray {
