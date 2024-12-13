@@ -1,19 +1,26 @@
 #pragma once
 
-#include "parser.h"
+#include "common.h"
+#include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
 
-enum SymbolType {
-    SYMBOL_VARIABLE,
-    SYMBOL_FUNCTION,
-    SYMBOL_STRUCT
-};
+// Forward declarations from parser.h
+struct ASTNode;
+void free_ast(struct ASTNode *node);
 
+// Symbol types
+#define SYMBOL_VARIABLE 1
+#define SYMBOL_FUNCTION 2
+#define SYMBOL_STRUCT 3
+
+// Forward declaration of SymbolTable
 struct SymbolTable;
 
 // Symbol information
 struct Symbol {
     char *name;
-    enum SymbolType type;
+    int type;
     union {
         struct {
             char *data_type;
@@ -45,6 +52,23 @@ struct SymbolTable {
     struct SymbolTable *parent;  // Parent scope
 };
 
+struct SemanticContext {
+    struct SymbolTable *current_scope;
+    char *current_function;  // Name of function being analyzed
+    int had_error;
+};
+
+// Forward declarations of all functions
+struct SymbolTable *create_global_scope(void);
+void analyze_node(struct ASTNode *node, struct SemanticContext *context);
+void analyze_function_declaration(struct ASTNode *node, struct SemanticContext *context);
+void analyze_variable_declaration(struct ASTNode *node, struct SemanticContext *context);
+void analyze_expression(struct ASTNode *node, struct SemanticContext *context);
+void add_symbol(struct SymbolTable *table, struct Symbol *symbol);
+struct Symbol *lookup_symbol(struct SymbolTable *scope, const char *name);
+int get_type_size(const char *type);
+
+// Function implementations
 struct SymbolTable *create_global_scope() {
     struct SymbolTable *scope = (struct SymbolTable *)malloc(sizeof(struct SymbolTable));
     scope->symbols = NULL;
@@ -54,13 +78,6 @@ struct SymbolTable *create_global_scope() {
     return scope;
 }
 
-struct SemanticContext {
-    struct SymbolTable *current_scope;
-    char *current_function;  // Name of function being analyzed
-    int had_error;
-};
-
-// Main entry point for semantic analysis
 int analyze_program(struct ASTNode *ast) {
     struct SemanticContext context = {
         .current_scope = create_global_scope(),
@@ -72,14 +89,21 @@ int analyze_program(struct ASTNode *ast) {
     return context.had_error ? -1 : 0;
 }
 
-// Analyze a single node
 void analyze_node(struct ASTNode *node, struct SemanticContext *context) {
+    if (!node) return;
+
     if (node->type == NODE_FUNCTION_DECLARATION) {
         analyze_function_declaration(node, context);
     } else if (node->type == NODE_VARIABLE_DECLARATION) {
         analyze_variable_declaration(node, context);
+    } else if (node->type == NODE_RETURN_STATEMENT) {
+        analyze_expression(node->return_stmt.value, context);
+    } else if (node->type == NODE_FUNCTION_CALL || 
+               node->type == NODE_BINARY_OPERATION ||
+               node->type == NODE_INTEGER_LITERAL ||
+               node->type == NODE_IDENTIFIER) {
+        analyze_expression(node, context);
     }
-    
 }
 
 void analyze_function_declaration(struct ASTNode *node, struct SemanticContext *context) {
@@ -122,3 +146,94 @@ void analyze_function_declaration(struct ASTNode *node, struct SemanticContext *
     context->current_scope = prev_scope;
     context->current_function = prev_function;
 }
+
+void add_symbol(struct SymbolTable *table, struct Symbol *symbol) {
+    if (table->count >= table->capacity) {
+        int new_capacity = table->capacity == 0 ? 8 : table->capacity * 2;
+        table->symbols = realloc(table->symbols, new_capacity * sizeof(struct Symbol*));
+        table->capacity = new_capacity;
+    }
+    table->symbols[table->count++] = symbol;
+}
+
+struct Symbol *lookup_symbol(struct SymbolTable *scope, const char *name) {
+    while (scope) {
+        for (int i = 0; i < scope->count; i++) {
+            if (strcmp(scope->symbols[i]->name, name) == 0) {
+                return scope->symbols[i];
+            }
+        }
+        scope = scope->parent;
+    }
+    return NULL;
+}
+
+int get_type_size(const char *type) {
+    if (strcmp(type, "int") == 0) {
+        return 4;
+    } else if (strcmp(type, "char") == 0) {
+        return 1;
+    }
+    return 0;  // Unknown type
+}
+
+void analyze_variable_declaration(struct ASTNode *node, struct SemanticContext *context) {
+    struct Symbol *var_sym = (struct Symbol *)malloc(sizeof(struct Symbol));
+    var_sym->name = strdup(node->var_decl.name);
+    var_sym->type = SYMBOL_VARIABLE;
+    var_sym->variable.data_type = strdup(node->var_decl.datatype);
+    var_sym->variable.size = get_type_size(node->var_decl.datatype);
+    var_sym->scope = NULL;
+
+    // Check if variable already exists in current scope
+    if (lookup_symbol(context->current_scope, var_sym->name)) {
+        printf("Error: Variable %s already declared in current scope\n", var_sym->name);
+        context->had_error = 1;
+        return;
+    }
+
+    // Analyze initialization expression if present
+    if (node->var_decl.value) {
+        analyze_expression(node->var_decl.value, context);
+    }
+
+    add_symbol(context->current_scope, var_sym);
+}
+
+void analyze_expression(struct ASTNode *node, struct SemanticContext *context) {
+    if (!node) return;
+
+    if (node->type == NODE_BINARY_OPERATION) {
+        analyze_expression(node->binary_op.left, context);
+        analyze_expression(node->binary_op.right, context);
+    } else if (node->type == NODE_INTEGER_LITERAL) {
+        // Nothing to analyze for integer literals
+    } else if (node->type == NODE_IDENTIFIER) {
+        struct Symbol *sym = lookup_symbol(context->current_scope, node->identifier.name);
+        if (!sym) {
+            printf("Error: Undefined variable %s\n", node->identifier.name);
+            context->had_error = 1;
+        }
+    } else if (node->type == NODE_FUNCTION_CALL) {
+        struct Symbol *sym = lookup_symbol(context->current_scope, node->func_call.name);
+        if (!sym) {
+            // Special case for printf - it's a builtin function
+            if (strcmp(node->func_call.name, "printf") != 0) {
+                printf("Error: Undefined function %s\n", node->func_call.name);
+                context->had_error = 1;
+            }
+        }
+        
+        // Analyze function arguments
+        struct ASTNode *arg = node->func_call.arguments;
+        while (arg) {
+            analyze_expression(arg, context);
+            arg = arg->next;
+        }
+    } else if (node->type == NODE_RETURN_STATEMENT) {
+        if (node->return_stmt.value) {
+            analyze_expression(node->return_stmt.value, context);
+        }
+    }
+}
+

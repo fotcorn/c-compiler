@@ -4,6 +4,7 @@
 
 #include "lexer.h"
 #include "parser.h"
+#include "sema.h"
 
 int main(int argc, char *argv[]) {
     char *input = NULL;
@@ -63,6 +64,18 @@ int main(int argc, char *argv[]) {
     // Print the AST
     printf("AST:\n");
     print_ast(ast, 0);
+
+    // Perform semantic analysis
+    printf("\nPerforming semantic analysis...\n");
+    int sema_status = analyze_program(ast);
+    if (sema_status != 0) {
+        fprintf(stderr, "Semantic analysis failed\n");
+        free_ast(ast);
+        free(tokens.tokens);
+        free(input);
+        return 1;
+    }
+    printf("Semantic analysis completed successfully\n");
 
     // Free resources
     free_ast(ast);
