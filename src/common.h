@@ -35,16 +35,16 @@
 #define TOKEN_AMPERSAND 32
 
 struct Token {
-    int type;
-    int start;
-    int end;
-    int line;
+  int type;
+  int start;
+  int end;
+  int line;
 };
 
 struct TokenArray {
-    struct Token *tokens;
-    int capacity;
-    int count;
+  struct Token *tokens;
+  int capacity;
+  int count;
 };
 
 // AST node types
@@ -63,53 +63,53 @@ struct ASTNode;
 
 // AST node structure
 struct ASTNode {
-    int type;
-    union {
-        // Function declaration
-        struct {
-            char *name;
-            struct ASTNode *body;
-        } function_decl;
+  int type;
+  union {
+    // Function declaration
+    struct {
+      char *name;
+      struct ASTNode *body;
+    } function_decl;
 
-        // Variable declaration
-        struct {
-            char *datatype;
-            char *name;
-            struct ASTNode *value;
-        } var_decl;
+    // Variable declaration
+    struct {
+      char *datatype;
+      char *name;
+      struct ASTNode *value;
+    } var_decl;
 
-        // Binary operation
-        struct {
-            char *operator;
-            struct ASTNode *left;
-            struct ASTNode *right;
-        } binary_op;
+    // Binary operation
+    struct {
+      char *operator;
+      struct ASTNode *left;
+      struct ASTNode *right;
+    } binary_op;
 
-        // Integer literal
-        struct {
-            int value;
-        } int_literal;
+    // Integer literal
+    struct {
+      int value;
+    } int_literal;
 
-        // Identifier
-        struct {
-            char *name;
-        } identifier;
+    // Identifier
+    struct {
+      char *name;
+    } identifier;
 
-        // Function call
-        struct {
-            char *name;
-            struct ASTNode *arguments;
-        } func_call;
+    // Function call
+    struct {
+      char *name;
+      struct ASTNode *arguments;
+    } func_call;
 
-        // Return statement
-        struct {
-            struct ASTNode *value;
-        } return_stmt;
+    // Return statement
+    struct {
+      struct ASTNode *value;
+    } return_stmt;
 
-        // String literal
-        struct {
-            char *value;
-        } string_literal;
-    };
-    struct ASTNode *next; // For linked list of statements
+    // String literal
+    struct {
+      char *value;
+    } string_literal;
+  };
+  struct ASTNode *next; // For linked list of statements
 };
