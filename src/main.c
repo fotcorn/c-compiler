@@ -5,6 +5,7 @@
 #include "lexer.h"
 #include "parser.h"
 #include "sema.h"
+#include "codegen.h"
 
 int main(int argc, char *argv[]) {
   char *input = NULL;
@@ -76,6 +77,33 @@ int main(int argc, char *argv[]) {
     return 1;
   }
   printf("Semantic analysis completed successfully\n");
+
+  // Generate assembly code
+  printf("\nGenerating assembly code...\n");
+  struct Assembly *assembly = generate_code(ast);
+  
+  // Create output file name by replacing .c with .s
+  char *output_file = strdup(argv[1]);
+  char *dot = strrchr(output_file, '.');
+  if (dot) *dot = '\0';
+  strcat(output_file, ".s");
+  
+  // Open output file
+  FILE *out = fopen(output_file, "w");
+  if (!out) {
+    fprintf(stderr, "Error: could not create output file '%s'\n", output_file);
+    free(output_file);
+    free_ast(ast);
+    free(tokens.tokens);
+    free(input);
+    return 1;
+  }
+
+  // Write assembly to file
+  print_assembly(out, assembly);
+  fclose(out);
+  printf("Assembly code written to %s\n", output_file);
+  free(output_file);
 
   // Free resources
   free_ast(ast);
