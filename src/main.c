@@ -68,8 +68,8 @@ int main(int argc, char *argv[]) {
 
   // Perform semantic analysis
   printf("\nPerforming semantic analysis...\n");
-  int sema_status = analyze_program(ast);
-  if (sema_status != 0) {
+  struct SemanticContext *sema_context = analyze_program(ast);
+  if (!sema_context) {
     fprintf(stderr, "Semantic analysis failed\n");
     free_ast(ast);
     free(tokens.tokens);
@@ -80,7 +80,7 @@ int main(int argc, char *argv[]) {
 
   // Generate assembly code
   printf("\nGenerating assembly code...\n");
-  struct Assembly *assembly = generate_code(ast);
+  struct Assembly *assembly = generate_code(ast, sema_context);
   
   // Create output file name by replacing .c with .s
   char *output_file = strdup(argv[1]);

@@ -76,6 +76,7 @@ struct ASTNode {
       char *datatype;
       char *name;
       struct ASTNode *value;
+      int stack_offset;
     } var_decl;
 
     // Binary operation
