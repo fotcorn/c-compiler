@@ -84,7 +84,7 @@ struct Assembly *create_assembly() {
 // Add an external symbol
 void add_extern_symbol(struct Assembly *assembly, const char *symbol) {
     assembly->extern_count++;
-    assembly->extern_symbols = realloc(assembly->extern_symbols, 
+    assembly->extern_symbols = realloc(assembly->extern_symbols,
                                      assembly->extern_count * sizeof(char*));
     assembly->extern_symbols[assembly->extern_count - 1] = strdup(symbol);
 }
@@ -99,7 +99,7 @@ struct Section *create_section(const char *name) {
 }
 
 // Add an instruction to a section
-void add_instruction(struct Section *section, int type, 
+void add_instruction(struct Section *section, int type,
                     struct Operand dest, struct Operand src) {
     struct Instruction *instr = malloc(sizeof(struct Instruction));
     instr->type = type;
@@ -197,27 +197,27 @@ void print_operand(FILE *out, struct Operand op) {
 // Print an instruction
 void print_instruction(FILE *out, struct Instruction *instr) {
     fprintf(out, "    %s ", instr_to_str(instr->type));
-    
+
     // Special case for RET which has no operands
     if (instr->type == INSTR_RET) {
         fprintf(out, "\n");
         return;
     }
-    
+
     // Special case for POP and PUSH which have only one operand
     if (instr->type == INSTR_POP || instr->type == INSTR_PUSH) {
         print_operand(out, instr->src);
         fprintf(out, "\n");
         return;
     }
-    
+
     // Special case for CALL
     if (instr->type == INSTR_CALL) {
         print_operand(out, instr->src);
         fprintf(out, "\n");
         return;
     }
-    
+
     // For most instructions, print source first, then destination (AT&T syntax)
     print_operand(out, instr->src);
     fprintf(out, ", ");
@@ -259,28 +259,28 @@ void print_assembly(FILE *out, struct Assembly *assembly) {
 void generate_binary_operation(struct Section *text, struct ASTNode *node, struct Symbol *func) {
     // First, save RDX as we'll need it for division
     add_instruction(text, INSTR_PUSH, reg_operand(REG_RDX), reg_operand(REG_RDX));
-    
+
     // Generate code for left operand
     if (node->binary_op.left->type == NODE_IDENTIFIER) {
-        struct Symbol *left_var = lookup_symbol(func->function.locals, 
+        struct Symbol *left_var = lookup_symbol(func->function.locals,
                                               node->binary_op.left->identifier.name);
         if (left_var) {
-            add_instruction(text, INSTR_MOV, reg_operand(REG_RAX), 
+            add_instruction(text, INSTR_MOV, reg_operand(REG_RAX),
                           mem_operand(REG_RBP, left_var->variable.offset));
         }
     } else if (node->binary_op.left->type == NODE_INTEGER_LITERAL) {
         add_instruction(text, INSTR_MOV, reg_operand(REG_RAX),
                        imm_operand(node->binary_op.left->int_literal.value));
     }
-    
+
     // For division, we need to save the left operand
     if (strcmp(node->binary_op.operator, "/") == 0) {
         add_instruction(text, INSTR_PUSH, reg_operand(REG_RAX), reg_operand(REG_RAX));
     }
-    
+
     // Generate code for right operand
     if (node->binary_op.right->type == NODE_IDENTIFIER) {
-        struct Symbol *right_var = lookup_symbol(func->function.locals, 
+        struct Symbol *right_var = lookup_symbol(func->function.locals,
                                                node->binary_op.right->identifier.name);
         if (right_var) {
             if (strcmp(node->binary_op.operator, "/") == 0) {
@@ -300,12 +300,12 @@ void generate_binary_operation(struct Section *text, struct ASTNode *node, struc
                           imm_operand(node->binary_op.right->int_literal.value));
         }
     }
-    
+
     // For division, restore left operand to RAX
     if (strcmp(node->binary_op.operator, "/") == 0) {
         add_instruction(text, INSTR_POP, reg_operand(REG_RAX), reg_operand(REG_RAX));
     }
-    
+
     // Perform the operation
     if (strcmp(node->binary_op.operator, "+") == 0) {
         add_instruction(text, INSTR_ADD, reg_operand(REG_RAX), reg_operand(REG_RCX));
@@ -319,7 +319,7 @@ void generate_binary_operation(struct Section *text, struct ASTNode *node, struc
         // Perform division: RAX = RDX:RAX / RBX
         add_instruction(text, INSTR_DIV, reg_operand(REG_RBX), reg_operand(REG_RBX));
     }
-    
+
     // Restore RDX
     add_instruction(text, INSTR_POP, reg_operand(REG_RDX), reg_operand(REG_RDX));
 }
@@ -327,32 +327,32 @@ void generate_binary_operation(struct Section *text, struct ASTNode *node, struc
 // Main code generation function
 struct Assembly *generate_code(struct ASTNode *ast, struct SemanticContext *context) {
     struct Assembly *assembly = create_assembly();
-    
+
     // Add printf as external symbol
     add_extern_symbol(assembly, "printf");
-    
+
     // Create text section
     struct Section *text = create_section(".text");
     text->next = NULL;
     assembly->sections = text;
-    
+
     // Generate code for the AST
     while (ast) {
         if (ast->type == NODE_FUNCTION_DECLARATION) {
             // Get function's symbol table and stack size
             struct Symbol *func = lookup_symbol(context->global_scope, ast->function_decl.name);
             if (!func) continue;  // Should never happen after semantic analysis
-            
+
             // Function prologue
             add_instruction(text, INSTR_PUSH, reg_operand(REG_RBP), reg_operand(REG_RBP));
             add_instruction(text, INSTR_MOV, reg_operand(REG_RBP), reg_operand(REG_RSP));
-            
+
             // Reserve stack space for all variables
             if (func->function.stack_size > 0) {
-                add_instruction(text, INSTR_SUB, reg_operand(REG_RSP), 
+                add_instruction(text, INSTR_SUB, reg_operand(REG_RSP),
                               imm_operand(func->function.stack_size));
             }
-            
+
             // Generate code for function body
             struct ASTNode *body = ast->function_decl.body;
             while (body) {
@@ -361,64 +361,72 @@ struct Assembly *generate_code(struct ASTNode *ast, struct SemanticContext *cont
                         struct Symbol *var = lookup_symbol(func->function.locals, body->var_decl.name);
                         if (var) {
                             if (body->var_decl.value->type == NODE_INTEGER_LITERAL) {
-                                add_instruction(text, INSTR_MOV, 
-                                             mem_operand(REG_RBP, var->variable.offset), 
+                                add_instruction(text, INSTR_MOV,
+                                             mem_operand(REG_RBP, var->variable.offset),
                                              imm_operand(body->var_decl.value->int_literal.value));
                             } else if (body->var_decl.value->type == NODE_BINARY_OPERATION) {
                                 generate_binary_operation(text, body->var_decl.value, func);
-                                add_instruction(text, INSTR_MOV, 
-                                             mem_operand(REG_RBP, var->variable.offset), 
+                                add_instruction(text, INSTR_MOV,
+                                             mem_operand(REG_RBP, var->variable.offset),
                                              reg_operand(REG_RAX));
                             }
                         }
                     }
                 } else if (body->type == NODE_BINARY_OPERATION) {
                     generate_binary_operation(text, body, func);
-                    
+
                     // Store result in target variable if it's an assignment
                     struct Symbol *target_var = lookup_symbol(func->function.locals, "c");
                     if (target_var) {
-                        add_instruction(text, INSTR_MOV, 
-                                       mem_operand(REG_RBP, target_var->variable.offset), 
+                        add_instruction(text, INSTR_MOV,
+                                       mem_operand(REG_RBP, target_var->variable.offset),
                                        reg_operand(REG_RAX));
                     }
                 } else if (body->type == NODE_FUNCTION_CALL) {
                     if (strcmp(body->func_call.name, "printf") == 0) {
-                        // Align stack to 16 bytes before call
-                        add_instruction(text, INSTR_SUB, reg_operand(REG_RSP), imm_operand(8));
-                        
-                        // Load format string address
-                        add_instruction(text, INSTR_LEA, reg_operand(REG_RDI), 
+                        // Save any registers we need to preserve
+                        add_instruction(text, INSTR_PUSH, reg_operand(REG_RDI), reg_operand(REG_RDI));
+                        add_instruction(text, INSTR_PUSH, reg_operand(REG_RSI), reg_operand(REG_RSI));
+
+                        // Load format string address into first argument register
+                        add_instruction(text, INSTR_LEA, reg_operand(REG_RDI),
                                      label_operand("format"));
-                        
-                        // Find variable being printed
+
+                        // Find variable being printed (second argument)
                         struct ASTNode *arg = body->func_call.arguments;
+                        // Skip the format string argument
+                        if (arg) arg = arg->next;
+
                         if (arg && arg->type == NODE_IDENTIFIER) {
-                            struct Symbol *var = lookup_symbol(func->function.locals, 
+                            struct Symbol *var = lookup_symbol(func->function.locals,
                                                            arg->identifier.name);
                             if (var) {
-                                // Load the value into %rsi
-                                add_instruction(text, INSTR_MOV, reg_operand(REG_RSI), 
+                                // Move the value into the second argument register
+                                add_instruction(text, INSTR_MOV, reg_operand(REG_RSI),
                                              mem_operand(REG_RBP, var->variable.offset));
                             }
                         }
-                        
+
+                        // Clear AL register (needed for variadic functions like printf)
+                        add_instruction(text, INSTR_MOV, reg_operand(REG_RAX), imm_operand(0));
+
                         // Call printf
-                        add_instruction(text, INSTR_CALL, label_operand("printf"), 
+                        add_instruction(text, INSTR_CALL, label_operand("printf"),
                                      label_operand("printf"));
-                                     
-                        // Restore stack alignment
-                        add_instruction(text, INSTR_ADD, reg_operand(REG_RSP), imm_operand(8));
+
+                        // Restore saved registers
+                        add_instruction(text, INSTR_POP, reg_operand(REG_RSI), reg_operand(REG_RSI));
+                        add_instruction(text, INSTR_POP, reg_operand(REG_RDI), reg_operand(REG_RDI));
                     }
                 } else if (body->type == NODE_RETURN_STATEMENT) {
                     if (body->return_stmt.value->type == NODE_INTEGER_LITERAL) {
-                        add_instruction(text, INSTR_MOV, reg_operand(REG_RAX), 
+                        add_instruction(text, INSTR_MOV, reg_operand(REG_RAX),
                                      imm_operand(body->return_stmt.value->int_literal.value));
                     }
                 }
                 body = body->next;
             }
-            
+
             // Function epilogue
             add_instruction(text, INSTR_MOV, reg_operand(REG_RSP), reg_operand(REG_RBP));
             add_instruction(text, INSTR_POP, reg_operand(REG_RBP), reg_operand(REG_RBP));
@@ -426,6 +434,6 @@ struct Assembly *generate_code(struct ASTNode *ast, struct SemanticContext *cont
         }
         ast = ast->next;
     }
-    
+
     return assembly;
-} 
+}
