@@ -344,6 +344,10 @@ void print_ast(struct ASTNode *node, int indent) {
       printf("Identifier: %s\n", node->identifier.name);
     } else if (node->type == NODE_FUNCTION_CALL) {
       printf("FunctionCall: %s\n", node->func_call.name);
+      if (node->func_call.arguments) {
+        printf("  Arguments:\n");
+        print_ast(node->func_call.arguments, indent + 2);
+      }
     } else if (node->type == NODE_RETURN_STATEMENT) {
       printf("ReturnStatement\n");
       if (node->return_stmt.value) {
