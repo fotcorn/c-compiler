@@ -65,11 +65,19 @@ struct Section {
     struct Section *next;
 };
 
+// String literals for the data section
+struct StringLiteral {
+    char *label;
+    char *value;
+    struct StringLiteral *next;
+};
+
 // Represents the complete assembly program
 struct Assembly {
     struct Section *sections;
     char **extern_symbols;  // Array of external symbols (e.g., printf)
     int extern_count;
+    struct StringLiteral *string_literals;
 };
 
 // Create a new assembly program
@@ -78,6 +86,7 @@ struct Assembly *create_assembly() {
     assembly->sections = NULL;
     assembly->extern_symbols = NULL;
     assembly->extern_count = 0;
+    assembly->string_literals = NULL;
     return assembly;
 }
 
@@ -185,8 +194,8 @@ void print_operand(FILE *out, struct Operand op) {
             fprintf(out, "(%%%s)", reg_to_str(op.mem.base_reg));
         }
     } else if (op.type == OPERAND_LABEL) {
-        // For data labels, use RIP-relative addressing
-        if (strcmp(op.label, "format") == 0) {
+        // Check if it's an internal label (starts with .)
+        if (op.label[0] == '.') {
             fprintf(out, "%s(%%rip)", op.label);
         } else {
             fprintf(out, "%s", op.label);
@@ -225,6 +234,20 @@ void print_instruction(FILE *out, struct Instruction *instr) {
     fprintf(out, "\n");
 }
 
+char *add_string_literal(struct Assembly *assembly, const char *value) {
+    static int string_counter = 0;
+    char label[32];
+    snprintf(label, sizeof(label), ".LC%d", string_counter++);
+
+    struct StringLiteral *str = malloc(sizeof(struct StringLiteral));
+    str->label = strdup(label);
+    str->value = strdup(value);
+    str->next = assembly->string_literals;
+    assembly->string_literals = str;
+
+    return str->label;
+}
+
 // Print the complete assembly program
 void print_assembly(FILE *out, struct Assembly *assembly) {
     // Print extern declarations
@@ -233,10 +256,15 @@ void print_assembly(FILE *out, struct Assembly *assembly) {
     }
     fprintf(out, "\n");
 
-    // Print data section first
+    // Print data section with all string literals
     fprintf(out, ".section .data\n");
-    fprintf(out, "format:\n");
-    fprintf(out, "    .string \"%%d\\n\"\n\n");
+    struct StringLiteral *str = assembly->string_literals;
+    while (str) {
+        fprintf(out, "%s:\n", str->label);
+        fprintf(out, "    .string %s\n", str->value);
+        str = str->next;
+    }
+    fprintf(out, "\n");
 
     // Print text section
     fprintf(out, ".section .text\n");
@@ -384,37 +412,55 @@ struct Assembly *generate_code(struct ASTNode *ast, struct SemanticContext *cont
                     }
                 } else if (body->type == NODE_FUNCTION_CALL) {
                     if (strcmp(body->func_call.name, "printf") == 0) {
-                        // Save any registers we need to preserve
+                        // Save registers we need to preserve
                         add_instruction(text, INSTR_PUSH, reg_operand(REG_RDI), reg_operand(REG_RDI));
                         add_instruction(text, INSTR_PUSH, reg_operand(REG_RSI), reg_operand(REG_RSI));
+                        add_instruction(text, INSTR_PUSH, reg_operand(REG_RDX), reg_operand(REG_RDX));
+                        add_instruction(text, INSTR_PUSH, reg_operand(REG_RCX), reg_operand(REG_RCX));
+                        add_instruction(text, INSTR_PUSH, reg_operand(REG_R8), reg_operand(REG_R8));
+                        add_instruction(text, INSTR_PUSH, reg_operand(REG_R9), reg_operand(REG_R9));
 
-                        // Load format string address into first argument register
-                        add_instruction(text, INSTR_LEA, reg_operand(REG_RDI),
-                                     label_operand("format"));
-
-                        // Find variable being printed (second argument)
+                        // Process format string
                         struct ASTNode *arg = body->func_call.arguments;
-                        // Skip the format string argument
-                        if (arg) arg = arg->next;
-
-                        if (arg && arg->type == NODE_IDENTIFIER) {
-                            struct Symbol *var = lookup_symbol(func->function.locals,
-                                                           arg->identifier.name);
-                            if (var) {
-                                // Move the value into the second argument register
-                                add_instruction(text, INSTR_MOV, reg_operand(REG_RSI),
-                                             mem_operand(REG_RBP, var->variable.offset));
-                            }
+                        if (arg && arg->type == NODE_STRING_LITERAL) {
+                            char *label = add_string_literal(assembly, arg->string_literal.value);
+                            add_instruction(text, INSTR_LEA, reg_operand(REG_RDI),
+                                         label_operand(label));
+                            arg = arg->next;
                         }
 
-                        // Clear AL register (needed for variadic functions like printf)
+                        // Process remaining arguments
+                        int reg_args[] = {REG_RSI, REG_RDX, REG_RCX, REG_R8, REG_R9};
+                        int arg_count = 0;
+
+                        while (arg && arg_count < 6) {  // x86_64 can pass up to 6 args in registers
+                            if (arg->type == NODE_IDENTIFIER) {
+                                struct Symbol *var = lookup_symbol(func->function.locals,
+                                                               arg->identifier.name);
+                                if (var) {
+                                    add_instruction(text, INSTR_MOV, reg_operand(reg_args[arg_count]),
+                                                 mem_operand(REG_RBP, var->variable.offset));
+                                }
+                            } else if (arg->type == NODE_INTEGER_LITERAL) {
+                                add_instruction(text, INSTR_MOV, reg_operand(reg_args[arg_count]),
+                                             imm_operand(arg->int_literal.value));
+                            }
+                            arg_count++;
+                            arg = arg->next;
+                        }
+
+                        // Clear AL register (needed for variadic functions)
                         add_instruction(text, INSTR_MOV, reg_operand(REG_RAX), imm_operand(0));
 
                         // Call printf
                         add_instruction(text, INSTR_CALL, label_operand("printf"),
                                      label_operand("printf"));
 
-                        // Restore saved registers
+                        // Restore saved registers in reverse order
+                        add_instruction(text, INSTR_POP, reg_operand(REG_R9), reg_operand(REG_R9));
+                        add_instruction(text, INSTR_POP, reg_operand(REG_R8), reg_operand(REG_R8));
+                        add_instruction(text, INSTR_POP, reg_operand(REG_RCX), reg_operand(REG_RCX));
+                        add_instruction(text, INSTR_POP, reg_operand(REG_RDX), reg_operand(REG_RDX));
                         add_instruction(text, INSTR_POP, reg_operand(REG_RSI), reg_operand(REG_RSI));
                         add_instruction(text, INSTR_POP, reg_operand(REG_RDI), reg_operand(REG_RDI));
                     }
