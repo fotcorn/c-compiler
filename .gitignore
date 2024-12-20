@@ -1,3 +1,4 @@
-main
 .vscode/
 examples/*.s
+venv/
+build*/

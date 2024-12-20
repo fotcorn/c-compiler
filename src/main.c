@@ -49,10 +49,6 @@ int main(int argc, char *argv[]) {
     return 1;
   }
 
-  printf("Tokens:\n");
-  print_tokens(tokens, input);
-  printf("\n");
-
   // Call the parser
   struct ASTNode *ast = parse(&tokens, input);
   if (!ast) {
@@ -62,12 +58,7 @@ int main(int argc, char *argv[]) {
     return 1;
   }
 
-  // Print the AST
-  printf("AST:\n");
-  print_ast(ast, 0);
-
   // Perform semantic analysis
-  printf("\nPerforming semantic analysis...\n");
   struct SemanticContext *sema_context = analyze_program(ast);
   if (!sema_context) {
     fprintf(stderr, "Semantic analysis failed\n");
@@ -76,34 +67,12 @@ int main(int argc, char *argv[]) {
     free(input);
     return 1;
   }
-  printf("Semantic analysis completed successfully\n");
 
   // Generate assembly code
-  printf("\nGenerating assembly code...\n");
   struct Assembly *assembly = generate_code(ast, sema_context);
   
-  // Create output file name by replacing .c with .s
-  char *output_file = strdup(argv[1]);
-  char *dot = strrchr(output_file, '.');
-  if (dot) *dot = '\0';
-  strcat(output_file, ".s");
-  
-  // Open output file
-  FILE *out = fopen(output_file, "w");
-  if (!out) {
-    fprintf(stderr, "Error: could not create output file '%s'\n", output_file);
-    free(output_file);
-    free_ast(ast);
-    free(tokens.tokens);
-    free(input);
-    return 1;
-  }
-
-  // Write assembly to file
-  print_assembly(out, assembly);
-  fclose(out);
-  printf("Assembly code written to %s\n", output_file);
-  free(output_file);
+  // Write assembly to stdout
+  print_assembly(stdout, assembly);
 
   // Free resources
   free_ast(ast);
