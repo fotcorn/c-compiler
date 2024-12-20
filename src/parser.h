@@ -47,7 +47,7 @@ static struct ASTNode *parse_program(struct Parser *parser) {
       current = &((*current)->next);
     } else {
       struct Token *current_token = peek(parser);
-      printf("Error on line %d: Expected function declaration.\n",
+      fprintf(stderr, "Error on line %d: Expected function declaration.\n",
              current_token ? current_token->line : 0);
       exit(1);
     }
@@ -92,7 +92,7 @@ static struct ASTNode *parse_function_declaration(struct Parser *parser) {
       current = &((*current)->next);
     } else {
       struct Token *current_token = peek(parser);
-      printf("Error on line %d: Invalid statement in function body.\n",
+      fprintf(stderr, "Error on line %d: Invalid statement in function body.\n",
              current_token ? current_token->line : 0);
       exit(1);
     }
@@ -277,7 +277,7 @@ static struct ASTNode *parse_primary(struct Parser *parser) {
     }
   } else {
     struct Token *current_token = peek(parser);
-    printf("Error on line %d: Unexpected token in primary expression.\n",
+    fprintf(stderr, "Error on line %d: Unexpected token in primary expression.\n",
            current_token ? current_token->line : 0);
     exit(1);
   }
@@ -315,7 +315,7 @@ static void expect(struct Parser *parser, int token_type, const char *message) {
     advance(parser);
   } else {
     struct Token *current = peek(parser);
-    printf("Error on line %d: %s\n", current ? current->line : 0, message);
+    fprintf(stderr, "Error on line %d: %s\n", current ? current->line : 0, message);
     exit(1);
   }
 }

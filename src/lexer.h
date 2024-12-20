@@ -110,7 +110,7 @@ int lex(char *input, int length, struct TokenArray *tokens) {
         token.type = TOKEN_NOT_EQUAL;
         i++;
       } else {
-        printf("Line %d: Error: Expected '=' after '!' at position %d\n", line,
+        fprintf(stderr, "Line %d: Error: Expected '=' after '!' at position %d\n", line,
                i);
         return 1;
       }
@@ -136,7 +136,7 @@ int lex(char *input, int length, struct TokenArray *tokens) {
         token.type = TOKEN_LOGICAL_OR;
         i++;
       } else {
-        printf("Line %d: Error: Expected '|' after '|' at position %d\n", line,
+        fprintf(stderr, "Line %d: Error: Expected '|' after '|' at position %d\n", line,
                i);
         return 1;
       }
@@ -165,7 +165,7 @@ int lex(char *input, int length, struct TokenArray *tokens) {
       if (i < length && input[i] == '"') {
         i++;
       } else {
-        printf("Line %d: Error: Unterminated string at position %d\n", line,
+        fprintf(stderr, "Line %d: Error: Unterminated string at position %d\n", line,
                token.start);
         return 1;
       }
@@ -182,7 +182,8 @@ int lex(char *input, int length, struct TokenArray *tokens) {
       if (i < length && input[i] == '\'') {
         i++;
       } else {
-        printf(
+        fprintf(
+            stderr,
             "Line %d: Error: Unterminated character literal at position %d\n",
             line, token.start);
         return 1;
@@ -218,7 +219,7 @@ int lex(char *input, int length, struct TokenArray *tokens) {
     }
     // Unexpected characters
     else {
-      printf("Line %d: Error: Unexpected character '%c' at position %d\n", line,
+      fprintf(stderr, "Line %d: Error: Unexpected character '%c' at position %d\n", line,
              input[i], i);
       return 1;
     }

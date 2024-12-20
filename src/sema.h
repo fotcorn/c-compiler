@@ -175,7 +175,7 @@ void analyze_function_declaration(struct ASTNode *node, struct SemanticContext *
     
     // Add function to current scope
     if (lookup_symbol(context->current_scope, func_sym->name)) {
-        printf("Error: Function %s already declared\n", func_sym->name);
+        fprintf(stderr, "Error: Function %s already declared\n", func_sym->name);
         context->had_error = 1;
         return;
     }
@@ -219,7 +219,7 @@ void analyze_variable_declaration(struct ASTNode *node, struct SemanticContext *
 
     // Check if variable already exists in current scope
     if (lookup_symbol(context->current_scope, var_sym->name)) {
-        printf("Error: Variable %s already declared in current scope\n", var_sym->name);
+        fprintf(stderr, "Error: Variable %s already declared in current scope\n", var_sym->name);
         context->had_error = 1;
         return;
     }
@@ -244,13 +244,13 @@ void analyze_expression(struct ASTNode *node, struct SemanticContext *context) {
     } else if (node->type == NODE_IDENTIFIER) {
         struct Symbol *sym = lookup_symbol(context->current_scope, node->identifier.name);
         if (!sym) {
-            printf("Error: Undefined variable %s\n", node->identifier.name);
+            fprintf(stderr, "Error: Undefined variable %s\n", node->identifier.name);
             context->had_error = 1;
         }
     } else if (node->type == NODE_FUNCTION_CALL) {
         struct Symbol *sym = lookup_symbol(context->current_scope, node->func_call.name);
         if (!sym && strcmp(node->func_call.name, "printf") != 0) {
-            printf("Error: Undefined function %s\n", node->func_call.name);
+            fprintf(stderr, "Error: Undefined function %s\n", node->func_call.name);
             context->had_error = 1;
         }
 
