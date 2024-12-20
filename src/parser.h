@@ -16,6 +16,7 @@ static struct ASTNode *parse_program(struct Parser *parser);
 static struct ASTNode *parse_function_declaration(struct Parser *parser);
 static struct ASTNode *parse_statement(struct Parser *parser);
 static struct ASTNode *parse_expression(struct Parser *parser);
+static struct ASTNode *parse_term(struct Parser *parser);
 static struct ASTNode *parse_factor(struct Parser *parser);
 static struct ASTNode *parse_primary(struct Parser *parser);
 static int match(struct Parser *parser, int token_type);
@@ -185,33 +186,57 @@ static struct ASTNode *parse_statement(struct Parser *parser) {
   return expr;
 }
 
-// Parse an expression (handles binary operations)
+// Parse an expression (handles +, -)
 static struct ASTNode *parse_expression(struct Parser *parser) {
-  return parse_factor(parser);
+    struct ASTNode *node = parse_term(parser);
+
+    while (match(parser, TOKEN_PLUS) || match(parser, TOKEN_MINUS)) {
+        struct Token *op_token = advance(parser);
+        char operator = parser->input[op_token->start];
+
+        struct ASTNode *right = parse_term(parser);
+
+        // Create binary operation node
+        struct ASTNode *bin_node = malloc(sizeof(struct ASTNode));
+        bin_node->type = NODE_BINARY_OPERATION;
+        bin_node->binary_op.operator = strndup(&operator, 1);
+        bin_node->binary_op.left = node;
+        bin_node->binary_op.right = right;
+        bin_node->next = NULL;
+
+        node = bin_node;
+    }
+
+    return node;
 }
 
-// Parse factors (handles '+', '-' operators)
+// Parse a term (handles *, /)
+static struct ASTNode *parse_term(struct Parser *parser) {
+    struct ASTNode *node = parse_factor(parser);
+
+    while (match(parser, TOKEN_MULTIPLY) || match(parser, TOKEN_DIVIDE)) {
+        struct Token *op_token = advance(parser);
+        char operator = parser->input[op_token->start];
+
+        struct ASTNode *right = parse_factor(parser);
+
+        // Create binary operation node
+        struct ASTNode *bin_node = malloc(sizeof(struct ASTNode));
+        bin_node->type = NODE_BINARY_OPERATION;
+        bin_node->binary_op.operator = strndup(&operator, 1);
+        bin_node->binary_op.left = node;
+        bin_node->binary_op.right = right;
+        bin_node->next = NULL;
+
+        node = bin_node;
+    }
+
+    return node;
+}
+
+// Parse a factor (primary expressions)
 static struct ASTNode *parse_factor(struct Parser *parser) {
-  struct ASTNode *node = parse_primary(parser);
-
-  while (match(parser, TOKEN_PLUS) || match(parser, TOKEN_MINUS)) {
-    struct Token *op_token = advance(parser);
-    char operator= parser->input[op_token->start];
-
-    struct ASTNode *right = parse_primary(parser);
-
-    // Create binary operation node
-    struct ASTNode *bin_node = malloc(sizeof(struct ASTNode));
-    bin_node->type = NODE_BINARY_OPERATION;
-    bin_node->binary_op.operator= strndup(&operator, 1);
-    bin_node->binary_op.left = node;
-    bin_node->binary_op.right = right;
-    bin_node->next = NULL;
-
-    node = bin_node;
-  }
-
-  return node;
+    return parse_primary(parser);
 }
 
 // Parse primary expressions

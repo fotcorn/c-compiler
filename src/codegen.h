@@ -288,6 +288,25 @@ void generate_binary_operation(struct Section *text, struct ASTNode *node, struc
     // First, save RDX as we'll need it for division
     add_instruction(text, INSTR_PUSH, reg_operand(REG_RDX), reg_operand(REG_RDX));
 
+    // For nested binary operations on the right, evaluate them first
+    if (node->binary_op.right->type == NODE_BINARY_OPERATION) {
+        // Save RAX if we need it for the left operand
+        if (node->binary_op.left->type == NODE_IDENTIFIER) {
+            add_instruction(text, INSTR_PUSH, reg_operand(REG_RAX), reg_operand(REG_RAX));
+        }
+        
+        // Generate code for right binary operation
+        generate_binary_operation(text, node->binary_op.right, func);
+        
+        // Move result to RCX
+        add_instruction(text, INSTR_MOV, reg_operand(REG_RCX), reg_operand(REG_RAX));
+        
+        // Restore RAX if we saved it
+        if (node->binary_op.left->type == NODE_IDENTIFIER) {
+            add_instruction(text, INSTR_POP, reg_operand(REG_RAX), reg_operand(REG_RAX));
+        }
+    }
+
     // Generate code for left operand
     if (node->binary_op.left->type == NODE_IDENTIFIER) {
         struct Symbol *left_var = lookup_symbol(func->function.locals,
@@ -299,6 +318,8 @@ void generate_binary_operation(struct Section *text, struct ASTNode *node, struc
     } else if (node->binary_op.left->type == NODE_INTEGER_LITERAL) {
         add_instruction(text, INSTR_MOV, reg_operand(REG_RAX),
                        imm_operand(node->binary_op.left->int_literal.value));
+    } else if (node->binary_op.left->type == NODE_BINARY_OPERATION) {
+        generate_binary_operation(text, node->binary_op.left, func);
     }
 
     // For division, we need to save the left operand
@@ -306,26 +327,28 @@ void generate_binary_operation(struct Section *text, struct ASTNode *node, struc
         add_instruction(text, INSTR_PUSH, reg_operand(REG_RAX), reg_operand(REG_RAX));
     }
 
-    // Generate code for right operand
-    if (node->binary_op.right->type == NODE_IDENTIFIER) {
-        struct Symbol *right_var = lookup_symbol(func->function.locals,
-                                               node->binary_op.right->identifier.name);
-        if (right_var) {
+    // Generate code for right operand (if not already handled)
+    if (node->binary_op.right->type != NODE_BINARY_OPERATION) {
+        if (node->binary_op.right->type == NODE_IDENTIFIER) {
+            struct Symbol *right_var = lookup_symbol(func->function.locals,
+                                                   node->binary_op.right->identifier.name);
+            if (right_var) {
+                if (strcmp(node->binary_op.operator, "/") == 0) {
+                    add_instruction(text, INSTR_MOV, reg_operand(REG_RBX),
+                                  mem_operand(REG_RBP, right_var->variable.offset));
+                } else {
+                    add_instruction(text, INSTR_MOV, reg_operand(REG_RCX),
+                                  mem_operand(REG_RBP, right_var->variable.offset));
+                }
+            }
+        } else if (node->binary_op.right->type == NODE_INTEGER_LITERAL) {
             if (strcmp(node->binary_op.operator, "/") == 0) {
                 add_instruction(text, INSTR_MOV, reg_operand(REG_RBX),
-                              mem_operand(REG_RBP, right_var->variable.offset));
+                              imm_operand(node->binary_op.right->int_literal.value));
             } else {
                 add_instruction(text, INSTR_MOV, reg_operand(REG_RCX),
-                              mem_operand(REG_RBP, right_var->variable.offset));
+                              imm_operand(node->binary_op.right->int_literal.value));
             }
-        }
-    } else if (node->binary_op.right->type == NODE_INTEGER_LITERAL) {
-        if (strcmp(node->binary_op.operator, "/") == 0) {
-            add_instruction(text, INSTR_MOV, reg_operand(REG_RBX),
-                          imm_operand(node->binary_op.right->int_literal.value));
-        } else {
-            add_instruction(text, INSTR_MOV, reg_operand(REG_RCX),
-                          imm_operand(node->binary_op.right->int_literal.value));
         }
     }
 
