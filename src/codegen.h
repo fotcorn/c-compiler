@@ -375,6 +375,35 @@ void generate_binary_operation(struct Section *text, struct ASTNode *node, struc
     add_instruction(text, INSTR_POP, reg_operand(REG_RDX), reg_operand(REG_RDX));
 }
 
+// Generate code for assignment
+void generate_assignment(struct Section *text, struct ASTNode *node, struct Symbol *func) {
+    // Generate code for right-hand side
+    if (node->assignment.value->type == NODE_INTEGER_LITERAL) {
+        add_instruction(text, INSTR_MOV, reg_operand(REG_RAX),
+                      imm_operand(node->assignment.value->int_literal.value));
+    } else if (node->assignment.value->type == NODE_BINARY_OPERATION) {
+        generate_binary_operation(text, node->assignment.value, func);
+    } else if (node->assignment.value->type == NODE_IDENTIFIER) {
+        struct Symbol *right_var = lookup_symbol(func->function.locals,
+                                               node->assignment.value->identifier.name);
+        if (right_var) {
+            add_instruction(text, INSTR_MOV, reg_operand(REG_RAX),
+                          mem_operand(REG_RBP, right_var->variable.offset));
+        }
+    }
+
+    // Store result in target variable
+    if (node->assignment.target->type == NODE_IDENTIFIER) {
+        struct Symbol *var = lookup_symbol(func->function.locals,
+                                         node->assignment.target->identifier.name);
+        if (var) {
+            add_instruction(text, INSTR_MOV,
+                          mem_operand(REG_RBP, var->variable.offset),
+                          reg_operand(REG_RAX));
+        }
+    }
+}
+
 // Main code generation function
 struct Assembly *generate_code(struct ASTNode *ast, struct SemanticContext *context) {
     struct Assembly *assembly = create_assembly();
@@ -425,14 +454,8 @@ struct Assembly *generate_code(struct ASTNode *ast, struct SemanticContext *cont
                     }
                 } else if (body->type == NODE_BINARY_OPERATION) {
                     generate_binary_operation(text, body, func);
-
-                    // Store result in target variable if it's an assignment
-                    struct Symbol *target_var = lookup_symbol(func->function.locals, "c");
-                    if (target_var) {
-                        add_instruction(text, INSTR_MOV,
-                                       mem_operand(REG_RBP, target_var->variable.offset),
-                                       reg_operand(REG_RAX));
-                    }
+                } else if (body->type == NODE_ASSIGNMENT) {
+                    generate_assignment(text, body, func);
                 } else if (body->type == NODE_FUNCTION_CALL) {
                     if (strcmp(body->func_call.name, "printf") == 0) {
                         // Save registers we need to preserve

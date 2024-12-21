@@ -118,22 +118,22 @@ static struct ASTNode *parse_function_declaration(struct Parser *parser) {
 static struct ASTNode *parse_statement(struct Parser *parser) {
   // Variable declaration or expression statement
   if (match(parser, TOKEN_IDENTIFIER)) {
-    struct Token *type_token = peek(parser);
+    struct Token *first_token = peek(parser);
 
     // Check if next token is an identifier (variable name)
     if (parser->position + 1 < parser->tokens->count &&
         parser->tokens->tokens[parser->position + 1].type == TOKEN_IDENTIFIER) {
       // Variable declaration
       advance(parser); // Consume datatype
-      struct Token *datatype_token = type_token;
+      struct Token *datatype_token = first_token;
       char *datatype = strndup(&parser->input[datatype_token->start],
-                               datatype_token->end - datatype_token->start);
+                             datatype_token->end - datatype_token->start);
 
       // Variable name
       expect(parser, TOKEN_IDENTIFIER, "Expected variable name.");
       struct Token *name_token = previous(parser);
       char *var_name = strndup(&parser->input[name_token->start],
-                               name_token->end - name_token->start);
+                             name_token->end - name_token->start);
 
       // Match '='
       expect(parser, TOKEN_EQUAL, "Expected '=' after variable name.");
@@ -151,6 +151,35 @@ static struct ASTNode *parse_statement(struct Parser *parser) {
       node->var_decl.datatype = datatype;
       node->var_decl.name = var_name;
       node->var_decl.value = value;
+      node->next = NULL;
+
+      return node;
+    } else if (parser->position + 1 < parser->tokens->count &&
+              parser->tokens->tokens[parser->position + 1].type == TOKEN_EQUAL) {
+      // Assignment statement
+      advance(parser); // Consume identifier
+      char *var_name = strndup(&parser->input[first_token->start],
+                             first_token->end - first_token->start);
+
+      // Match '='
+      expect(parser, TOKEN_EQUAL, "Expected '=' after variable name.");
+
+      // Parse expression
+      struct ASTNode *value = parse_expression(parser);
+
+      // Match ';'
+      expect(parser, TOKEN_SEMICOLON, "Expected ';' after assignment.");
+
+      // Create identifier node for target
+      struct ASTNode *target = malloc(sizeof(struct ASTNode));
+      target->type = NODE_IDENTIFIER;
+      target->identifier.name = var_name;
+
+      // Create assignment node
+      struct ASTNode *node = malloc(sizeof(struct ASTNode));
+      node->type = NODE_ASSIGNMENT;
+      node->assignment.target = target;
+      node->assignment.value = value;
       node->next = NULL;
 
       return node;

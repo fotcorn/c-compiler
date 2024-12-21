@@ -57,6 +57,7 @@ struct TokenArray {
 #define NODE_FUNCTION_CALL 7
 #define NODE_RETURN_STATEMENT 8
 #define NODE_STRING_LITERAL 9
+#define NODE_ASSIGNMENT 10
 
 // Forward declaration of ASTNode
 struct ASTNode;
@@ -111,6 +112,12 @@ struct ASTNode {
     struct {
       char *value;
     } string_literal;
+
+    // Assignment
+    struct {
+      struct ASTNode *target;
+      struct ASTNode *value;
+    } assignment;
   };
   struct ASTNode *next; // For linked list of statements
 };
