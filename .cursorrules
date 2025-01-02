@@ -3,3 +3,5 @@ It compiles C code to x86-64 assembly, and then uses an external assembler and l
 Because its self hosting, some constructs are not supported and should NOT be used when generating code:
 no switch/case, no compound assignment, no macros apart from define, no for loop, no do-while loops.
 
+The compiler can be built by running "ninja" in the build directory.
+Tests are written using lit in the test directory. They can be run with "lit -v test/" in the build directory.
