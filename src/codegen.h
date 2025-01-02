@@ -227,6 +227,13 @@ void print_instruction(FILE *out, struct Instruction *instr) {
         return;
     }
 
+    // Special case for DIV which has only one operand
+    if (instr->type == INSTR_DIV) {
+        print_operand(out, instr->dest);
+        fprintf(out, "\n");
+        return;
+    }
+
     // For most instructions, print source first, then destination (AT&T syntax)
     print_operand(out, instr->src);
     fprintf(out, ", ");
@@ -368,7 +375,8 @@ void generate_binary_operation(struct Section *text, struct ASTNode *node, struc
         // Clear RDX for division
         add_instruction(text, INSTR_MOV, reg_operand(REG_RDX), imm_operand(0));
         // Perform division: RAX = RDX:RAX / RBX
-        add_instruction(text, INSTR_DIV, reg_operand(REG_RBX), reg_operand(REG_RBX));
+        struct Operand no_op = {0};  // Empty operand for single-operand instructions
+        add_instruction(text, INSTR_DIV, reg_operand(REG_RBX), no_op);
     }
 
     // Restore RDX

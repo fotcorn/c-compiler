@@ -27,7 +27,7 @@ int lex(char *input, int length, struct TokenArray *tokens) {
   int line = 1;
 
   while (i < length) {
-    // Skip whitespace and track line numbers
+    // Skip whitespace
     while (i < length &&
            (input[i] == ' ' || input[i] == '\n' || input[i] == '\t')) {
       if (input[i] == '\n')
@@ -37,11 +37,6 @@ int lex(char *input, int length, struct TokenArray *tokens) {
     if (i >= length)
       break;
 
-    // Create token with current position
-    struct Token token;
-    token.start = i;
-    token.line = line;
-
     // Handle comments
     if (i + 1 < length && input[i] == '/') {
       if (input[i + 1] == '/') {
@@ -49,10 +44,8 @@ int lex(char *input, int length, struct TokenArray *tokens) {
         while (i < length && input[i] != '\n') {
           i++;
         }
-        if (i < length && input[i] == '\n') {
+        if (i < length && input[i] == '\n')
           line++;
-          i++;
-        }
         continue;
       } else if (input[i + 1] == '*') {
         // Multi-line comment
@@ -69,9 +62,12 @@ int lex(char *input, int length, struct TokenArray *tokens) {
         i += 2;  // Skip */
         continue;
       }
-      token.type = TOKEN_DIVIDE;
-      i++;
     }
+
+    // Create token with current position
+    struct Token token;
+    token.start = i;
+    token.line = line;
 
     // Single character tokens
     if (input[i] == '{') {
