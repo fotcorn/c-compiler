@@ -43,13 +43,32 @@ int lex(char *input, int length, struct TokenArray *tokens) {
     token.line = line;
 
     // Handle comments
-    if (i + 1 < length && input[i] == '/' && input[i + 1] == '/') {
-      while (i < length && input[i] != '\n') {
-        i++;
+    if (i + 1 < length && input[i] == '/') {
+      if (input[i + 1] == '/') {
+        // Single-line comment
+        while (i < length && input[i] != '\n') {
+          i++;
+        }
+        if (i < length && input[i] == '\n')
+          line++;
+        continue;
+      } else if (input[i + 1] == '*') {
+        // Multi-line comment
+        i += 2;  // Skip /*
+        while (i + 1 < length && !(input[i] == '*' && input[i + 1] == '/')) {
+          if (input[i] == '\n')
+            line++;
+          i++;
+        }
+        if (i + 1 >= length) {
+          fprintf(stderr, "Line %d: Error: Unterminated multi-line comment\n", line);
+          return 1;
+        }
+        i += 2;  // Skip */
+        continue;
       }
-      if (i < length && input[i] == '\n')
-        line++;
-      continue;
+      token.type = TOKEN_DIVIDE;
+      i++;
     }
 
     // Single character tokens
