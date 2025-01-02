@@ -1,0 +1,5 @@
+This is a self hosting (aspiring for now) c compiler written in c.
+It compiles C code to x86-64 assembly, and then uses an external assembler and linker.
+Because its self hosting, some constructs are not supported and should NOT be used when generating code:
+no switch/case, no compound assignment, no macros apart from define, no for loop, no do-while loops.
+
