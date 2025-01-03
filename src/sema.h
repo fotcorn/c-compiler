@@ -27,7 +27,7 @@ struct Symbol {
             int offset;      // Stack offset from RBP
             int size;       // Size in bytes
         } variable;
-        
+
         struct {
             char *return_type;
             int param_count;
@@ -35,7 +35,7 @@ struct Symbol {
             int stack_size;  // Total stack frame size
             struct SymbolTable *locals;  // Local variables
         } function;
-        
+
         struct {
             int total_size;  // Total struct size
             int field_count;
@@ -124,13 +124,17 @@ struct Symbol *create_variable_symbol(const char *name, const char *type, int of
 }
 
 // Create a new function symbol
-struct Symbol *create_function_symbol(const char *name) {
+struct Symbol *create_function_symbol(const char *name, const char *return_type,
+                                    struct ASTNode *node) {
     struct Symbol *sym = malloc(sizeof(struct Symbol));
     sym->name = strdup(name);
     sym->type = SYMBOL_FUNCTION;
-    sym->function.return_type = strdup("int");  // Default to int for now
-    sym->function.param_count = 0;
-    sym->function.param_types = NULL;
+    sym->function.return_type = strdup(return_type);
+    sym->function.param_count = node->function_decl.param_count;
+    sym->function.param_types = malloc(node->function_decl.param_count * sizeof(char*));
+    for (int i = 0; i < node->function_decl.param_count; i++) {
+        sym->function.param_types[i] = strdup(node->function_decl.parameters[i].type);
+    }
     sym->function.stack_size = 0;
     sym->function.locals = create_symbol_table();
     sym->scope = sym->function.locals;
@@ -145,9 +149,9 @@ struct SemanticContext *analyze_program(struct ASTNode *ast) {
     context->current_function = NULL;
     context->had_error = 0;
     context->current_stack_offset = 0;
-    
+
     analyze_node(ast, context);
-    
+
     return context->had_error ? NULL : context;
 }
 
@@ -171,8 +175,10 @@ void analyze_node(struct ASTNode *node, struct SemanticContext *context) {
 
 // Analyze a function declaration
 void analyze_function_declaration(struct ASTNode *node, struct SemanticContext *context) {
-    struct Symbol *func_sym = create_function_symbol(node->function_decl.name);
-    
+    struct Symbol *func_sym = create_function_symbol(node->function_decl.name,
+                                                   node->function_decl.return_type,
+                                                   node);
+
     // Add function to current scope
     if (lookup_symbol(context->current_scope, func_sym->name)) {
         fprintf(stderr, "Error: Function %s already declared\n", func_sym->name);
@@ -187,6 +193,20 @@ void analyze_function_declaration(struct ASTNode *node, struct SemanticContext *
     struct SymbolTable *prev_scope = context->current_scope;
     context->current_scope = func_sym->function.locals;
     context->current_stack_offset = 0;
+
+    // Add parameters to function's local scope
+    for (int i = 0; i < node->function_decl.param_count; i++) {
+        // Parameters are pushed in reverse order, so they have positive offsets from rbp
+        // First param at 16(%rbp), second at 24(%rbp), etc. (8(%rbp) is return address)
+        int param_offset = 16 + (i * 8);
+
+        struct Symbol *param_sym = create_variable_symbol(
+            node->function_decl.parameters[i].name,
+            node->function_decl.parameters[i].type,
+            param_offset
+        );
+        add_symbol(context->current_scope, param_sym);
+    }
 
     // Analyze function body
     struct ASTNode *body = node->function_decl.body;
@@ -207,7 +227,7 @@ void analyze_function_declaration(struct ASTNode *node, struct SemanticContext *
 void analyze_variable_declaration(struct ASTNode *node, struct SemanticContext *context) {
     // Allocate stack space for the variable
     context->current_stack_offset -= 8;  // 8 bytes for all variables for now
-    
+
     struct Symbol *var_sym = create_variable_symbol(
         node->var_decl.name,
         node->var_decl.datatype,

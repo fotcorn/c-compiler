@@ -59,14 +59,12 @@ static struct ASTNode *parse_program(struct Parser *parser) {
 
 // Parse a function declaration
 static struct ASTNode *parse_function_declaration(struct Parser *parser) {
-  // Match 'int' or other datatype
+  // Match return type
   if (!match(parser, TOKEN_IDENTIFIER)) {
     return NULL;
   }
   struct Token *type_token = advance(parser);
-
-  // Extract the datatype
-  char *datatype = strndup(&parser->input[type_token->start],
+  char *return_type = strndup(&parser->input[type_token->start],
                            type_token->end - type_token->start);
 
   // Match function name (e.g., 'main')
@@ -75,9 +73,40 @@ static struct ASTNode *parse_function_declaration(struct Parser *parser) {
   char *func_name = strndup(&parser->input[name_token->start],
                             name_token->end - name_token->start);
 
-  // Match '(' ')'
+  // Match '('
   expect(parser, TOKEN_LEFT_PAREN, "Expected '(' after function name.");
-  expect(parser, TOKEN_RIGHT_PAREN, "Expected ')' after '('.");
+
+  // Parse parameters
+  struct FunctionParameter *parameters = NULL;
+  int param_count = 0;
+  int param_capacity = 0;
+
+  if (!match(parser, TOKEN_RIGHT_PAREN)) {
+    do {
+      // Parameter type
+      expect(parser, TOKEN_IDENTIFIER, "Expected parameter type.");
+      struct Token *param_type_token = previous(parser);
+
+      // Parameter name
+      expect(parser, TOKEN_IDENTIFIER, "Expected parameter name.");
+      struct Token *param_name_token = previous(parser);
+
+      // Add parameter to array
+      if (param_count >= param_capacity) {
+        param_capacity = param_capacity == 0 ? 4 : param_capacity * 2;
+        parameters = realloc(parameters, param_capacity * sizeof(struct FunctionParameter));
+      }
+
+      parameters[param_count].type = strndup(&parser->input[param_type_token->start],
+                                           param_type_token->end - param_type_token->start);
+      parameters[param_count].name = strndup(&parser->input[param_name_token->start],
+                                           param_name_token->end - param_name_token->start);
+      param_count++;
+    } while (match(parser, TOKEN_COMMA) && advance(parser));
+  }
+
+  // Match ')'
+  expect(parser, TOKEN_RIGHT_PAREN, "Expected ')' after parameters.");
 
   // Match '{'
   expect(parser, TOKEN_LEFT_BRACE, "Expected '{' before function body.");
@@ -106,10 +135,11 @@ static struct ASTNode *parse_function_declaration(struct Parser *parser) {
   struct ASTNode *node = malloc(sizeof(struct ASTNode));
   node->type = NODE_FUNCTION_DECLARATION;
   node->function_decl.name = func_name;
+  node->function_decl.return_type = return_type;
+  node->function_decl.parameters = parameters;
+  node->function_decl.param_count = param_count;
   node->function_decl.body = body;
   node->next = NULL;
-
-  free(datatype); // In this simple parser, we don't use the datatype
 
   return node;
 }
@@ -422,6 +452,12 @@ void free_ast(struct ASTNode *node) {
 
     if (node->type == NODE_FUNCTION_DECLARATION) {
       free(node->function_decl.name);
+      free(node->function_decl.return_type);
+      for (int i = 0; i < node->function_decl.param_count; i++) {
+        free(node->function_decl.parameters[i].name);
+        free(node->function_decl.parameters[i].type);
+      }
+      free(node->function_decl.parameters);
       free_ast(node->function_decl.body);
     } else if (node->type == NODE_VARIABLE_DECLARATION) {
       free(node->var_decl.datatype);

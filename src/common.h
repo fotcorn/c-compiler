@@ -62,6 +62,12 @@ struct TokenArray {
 // Forward declaration of ASTNode
 struct ASTNode;
 
+// Function parameter structure
+struct FunctionParameter {
+  char *name;
+  char *type;
+};
+
 // AST node structure
 struct ASTNode {
   int type;
@@ -69,6 +75,9 @@ struct ASTNode {
     // Function declaration
     struct {
       char *name;
+      char *return_type;
+      struct FunctionParameter *parameters;
+      int param_count;
       struct ASTNode *body;
     } function_decl;
 
