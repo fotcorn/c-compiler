@@ -152,6 +152,12 @@ struct SemanticContext *analyze_program(struct ASTNode *ast) {
 
     analyze_node(ast, context);
 
+    // Verify that main function exists
+    if (!lookup_symbol(context->global_scope, "main")) {
+        fprintf(stderr, "Error: No main function found\n");
+        context->had_error = 1;
+    }
+
     return context->had_error ? NULL : context;
 }
 
@@ -161,6 +167,7 @@ void analyze_node(struct ASTNode *node, struct SemanticContext *context) {
 
     if (node->type == NODE_FUNCTION_DECLARATION) {
         analyze_function_declaration(node, context);
+        analyze_node(node->next, context);
     } else if (node->type == NODE_VARIABLE_DECLARATION) {
         analyze_variable_declaration(node, context);
     } else if (node->type == NODE_RETURN_STATEMENT) {
@@ -192,6 +199,7 @@ void analyze_function_declaration(struct ASTNode *node, struct SemanticContext *
     context->current_function = func_sym->name;
     struct SymbolTable *prev_scope = context->current_scope;
     context->current_scope = func_sym->function.locals;
+    context->current_scope->parent = prev_scope;
     context->current_stack_offset = 0;
 
     // Add parameters to function's local scope

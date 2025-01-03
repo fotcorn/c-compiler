@@ -46,7 +46,7 @@ static struct ASTNode *parse_program(struct Parser *parser) {
     if (func_decl) {
       *current = func_decl;
       current = &((*current)->next);
-    } else {
+    } else if (!is_at_end(parser)) {
       struct Token *current_token = peek(parser);
       fprintf(stderr, "Error on line %d: Expected function declaration.\n",
              current_token ? current_token->line : 0);
