@@ -17,6 +17,7 @@
 #define INSTR_LEA 8
 #define INSTR_MUL 9
 #define INSTR_DIV 10
+#define INSTR_LABEL 11
 
 // Operand types
 #define OPERAND_REGISTER 1
@@ -178,6 +179,7 @@ const char *instr_to_str(int type) {
     if (type == INSTR_LEA) return "leaq";
     if (type == INSTR_MUL) return "imulq";
     if (type == INSTR_DIV) return "idivq";
+    if (type == INSTR_LABEL) return "label";
     return "unknown";
 }
 
@@ -276,14 +278,17 @@ void print_assembly(FILE *out, struct Assembly *assembly) {
     // Print text section
     fprintf(out, ".section .text\n");
     fprintf(out, ".globl main\n");
-    fprintf(out, "main:\n");
 
     // Print each section
     struct Section *section = assembly->sections;
     while (section) {
         struct Instruction *instr = section->instructions;
         while (instr) {
-            print_instruction(out, instr);
+            if (instr->type == INSTR_LABEL) {
+                fprintf(out, "%s:\n", instr->src.label);
+            } else {
+                print_instruction(out, instr);
+            }
             instr = instr->next;
         }
         section = section->next;
@@ -424,12 +429,30 @@ struct Assembly *generate_code(struct ASTNode *ast, struct SemanticContext *cont
     text->next = NULL;
     assembly->sections = text;
 
-    // Generate code for the AST
-    while (ast) {
-        if (ast->type == NODE_FUNCTION_DECLARATION) {
+    // Generate code for each function in the AST
+    struct ASTNode *current = ast;
+    while (current) {
+        if (current->type == NODE_FUNCTION_DECLARATION) {
             // Get function's symbol table and stack size
-            struct Symbol *func = lookup_symbol(context->global_scope, ast->function_decl.name);
+            struct Symbol *func = lookup_symbol(context->global_scope, current->function_decl.name);
             if (!func) continue;  // Should never happen after semantic analysis
+
+            // Add function label
+            struct Instruction *label = malloc(sizeof(struct Instruction));
+            label->type = INSTR_LABEL;
+            label->src.type = OPERAND_LABEL;
+            label->src.label = strdup(current->function_decl.name);
+            label->next = NULL;
+
+            if (!text->instructions) {
+                text->instructions = label;
+            } else {
+                struct Instruction *last = text->instructions;
+                while (last->next) {
+                    last = last->next;
+                }
+                last->next = label;
+            }
 
             // Function prologue
             add_instruction(text, INSTR_PUSH, reg_operand(REG_RBP), reg_operand(REG_RBP));
@@ -441,8 +464,21 @@ struct Assembly *generate_code(struct ASTNode *ast, struct SemanticContext *cont
                               imm_operand(func->function.stack_size));
             }
 
+            // Save parameters to their stack locations
+            for (int i = 0; i < current->function_decl.param_count && i < 6; i++) {
+                struct Symbol *param = lookup_symbol(func->function.locals,
+                                                  current->function_decl.parameters[i].name);
+                if (param) {
+                    int reg_args[] = {REG_RDI, REG_RSI, REG_RDX, REG_RCX, REG_R8, REG_R9};
+                    add_instruction(text, INSTR_MOV,
+                                  mem_operand(REG_RBP, param->variable.offset),
+                                  reg_operand(reg_args[i]));
+                }
+            }
+
             // Generate code for function body
-            struct ASTNode *body = ast->function_decl.body;
+            struct ASTNode *body = current->function_decl.body;
+            int has_return = 0;
             while (body) {
                 if (body->type == NODE_VARIABLE_DECLARATION) {
                     if (body->var_decl.value) {
@@ -455,8 +491,39 @@ struct Assembly *generate_code(struct ASTNode *ast, struct SemanticContext *cont
                             } else if (body->var_decl.value->type == NODE_BINARY_OPERATION) {
                                 generate_binary_operation(text, body->var_decl.value, func);
                                 add_instruction(text, INSTR_MOV,
+                                            mem_operand(REG_RBP, var->variable.offset),
+                                            reg_operand(REG_RAX));
+                            } else if (body->var_decl.value->type == NODE_FUNCTION_CALL) {
+                                // Save registers that might be clobbered by the function call
+                                add_instruction(text, INSTR_PUSH, reg_operand(REG_RDI), reg_operand(REG_RDI));
+                                add_instruction(text, INSTR_PUSH, reg_operand(REG_RSI), reg_operand(REG_RSI));
+
+                                // Process function arguments
+                                struct ASTNode *arg = body->var_decl.value->func_call.arguments;
+                                int reg_args[] = {REG_RDI, REG_RSI, REG_RDX, REG_RCX, REG_R8, REG_R9};
+                                int arg_count = 0;
+
+                                while (arg && arg_count < 6) {
+                                    if (arg->type == NODE_INTEGER_LITERAL) {
+                                        add_instruction(text, INSTR_MOV, reg_operand(reg_args[arg_count]),
+                                                     imm_operand(arg->int_literal.value));
+                                    }
+                                    arg_count++;
+                                    arg = arg->next;
+                                }
+
+                                // Call the function
+                                add_instruction(text, INSTR_CALL, label_operand(body->var_decl.value->func_call.name),
+                                             label_operand(body->var_decl.value->func_call.name));
+
+                                // Store the return value
+                                add_instruction(text, INSTR_MOV,
                                              mem_operand(REG_RBP, var->variable.offset),
                                              reg_operand(REG_RAX));
+
+                                // Restore saved registers
+                                add_instruction(text, INSTR_POP, reg_operand(REG_RSI), reg_operand(REG_RSI));
+                                add_instruction(text, INSTR_POP, reg_operand(REG_RDI), reg_operand(REG_RDI));
                             }
                         }
                     }
@@ -487,7 +554,7 @@ struct Assembly *generate_code(struct ASTNode *ast, struct SemanticContext *cont
                         int reg_args[] = {REG_RSI, REG_RDX, REG_RCX, REG_R8, REG_R9};
                         int arg_count = 0;
 
-                        while (arg && arg_count < 6) {  // x86_64 can pass up to 6 args in registers
+                        while (arg && arg_count < 6) {
                             if (arg->type == NODE_IDENTIFIER) {
                                 struct Symbol *var = lookup_symbol(func->function.locals,
                                                                arg->identifier.name);
@@ -519,20 +586,35 @@ struct Assembly *generate_code(struct ASTNode *ast, struct SemanticContext *cont
                         add_instruction(text, INSTR_POP, reg_operand(REG_RDI), reg_operand(REG_RDI));
                     }
                 } else if (body->type == NODE_RETURN_STATEMENT) {
+                    has_return = 1;
                     if (body->return_stmt.value->type == NODE_INTEGER_LITERAL) {
                         add_instruction(text, INSTR_MOV, reg_operand(REG_RAX),
                                      imm_operand(body->return_stmt.value->int_literal.value));
+                    } else if (body->return_stmt.value->type == NODE_IDENTIFIER) {
+                        struct Symbol *var = lookup_symbol(func->function.locals,
+                                                       body->return_stmt.value->identifier.name);
+                        if (var) {
+                            add_instruction(text, INSTR_MOV, reg_operand(REG_RAX),
+                                         mem_operand(REG_RBP, var->variable.offset));
+                        }
                     }
+
+                    // Function epilogue and return
+                    add_instruction(text, INSTR_MOV, reg_operand(REG_RSP), reg_operand(REG_RBP));
+                    add_instruction(text, INSTR_POP, reg_operand(REG_RBP), reg_operand(REG_RBP));
+                    add_instruction(text, INSTR_RET, reg_operand(REG_RAX), reg_operand(REG_RAX));
                 }
                 body = body->next;
             }
 
-            // Function epilogue
-            add_instruction(text, INSTR_MOV, reg_operand(REG_RSP), reg_operand(REG_RBP));
-            add_instruction(text, INSTR_POP, reg_operand(REG_RBP), reg_operand(REG_RBP));
-            add_instruction(text, INSTR_RET, reg_operand(REG_RAX), reg_operand(REG_RAX));
+            // If we didn't return in the function body, add the epilogue here
+            if (!has_return) {
+                add_instruction(text, INSTR_MOV, reg_operand(REG_RSP), reg_operand(REG_RBP));
+                add_instruction(text, INSTR_POP, reg_operand(REG_RBP), reg_operand(REG_RBP));
+                add_instruction(text, INSTR_RET, reg_operand(REG_RAX), reg_operand(REG_RAX));
+            }
         }
-        ast = ast->next;
+        current = current->next;
     }
 
     return assembly;
