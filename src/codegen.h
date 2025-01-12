@@ -438,6 +438,10 @@ static int generate_expression(struct Section *text,
             int r = generate_expression(text, arg, func, assembly, ctx);
             add_instruction(text, INSTR_MOV, reg_operand(reg_args[arg_count]), reg_operand(r));
             free_register(ctx, r); // done with that temp
+
+            // Mark this argument register as used so it doesn't get reused when
+            // evaluating the next argument
+            ctx->used[reg_args[arg_count] - 1] = 1;
             arg = arg->next;
             arg_count++;
         }
