@@ -36,6 +36,12 @@
 #define REG_RSI 8
 #define REG_R8  9
 #define REG_R9  10
+#define REG_R10 11
+#define REG_R11 12
+#define REG_R12 13
+#define REG_R13 14
+#define REG_R14 15
+#define REG_R15 16
 
 // Represents an operand in an assembly instruction
 struct Operand {
@@ -164,6 +170,12 @@ const char *reg_to_str(int reg) {
     if (reg == REG_RSI) return "rsi";
     if (reg == REG_R8)  return "r8";
     if (reg == REG_R9)  return "r9";
+    if (reg == REG_R10) return "r10";
+    if (reg == REG_R11) return "r11";
+    if (reg == REG_R12) return "r12";
+    if (reg == REG_R13) return "r13";
+    if (reg == REG_R14) return "r14";
+    if (reg == REG_R15) return "r15";
     return "unknown";
 }
 
@@ -295,147 +307,247 @@ void print_assembly(FILE *out, struct Assembly *assembly) {
     }
 }
 
-// Generate code for binary operation
-void generate_binary_operation(struct Section *text, struct ASTNode *node, struct Symbol *func) {
-    // First, save RDX as we'll need it for division
-    add_instruction(text, INSTR_PUSH, reg_operand(REG_RDX), reg_operand(REG_RDX));
+// ---------------------- Register Allocation Context -----------------------
+// We'll define a few more registers we can use as scratch registers for expressions.
+// A small struct to keep track of which registers are currently in use.
+// For simplicity, we store a small fixed array of possible scratch registers.
+// "used[i] = 1" if that register is already allocated, 0 if free.
+struct CodegenContext {
+    int used[16];  // Enough space for up to R15 if you want
+};
 
-    // For nested binary operations on the right, evaluate them first
-    if (node->binary_op.right->type == NODE_BINARY_OPERATION) {
-        // Save RAX if we need it for the left operand
-        if (node->binary_op.left->type == NODE_IDENTIFIER) {
-            add_instruction(text, INSTR_PUSH, reg_operand(REG_RAX), reg_operand(REG_RAX));
-        }
-        
-        // Generate code for right binary operation
-        generate_binary_operation(text, node->binary_op.right, func);
-        
-        // Move result to RCX
-        add_instruction(text, INSTR_MOV, reg_operand(REG_RCX), reg_operand(REG_RAX));
-        
-        // Restore RAX if we saved it
-        if (node->binary_op.left->type == NODE_IDENTIFIER) {
-            add_instruction(text, INSTR_POP, reg_operand(REG_RAX), reg_operand(REG_RAX));
-        }
+// Initializes all registers as free.
+static void init_codegen_context(struct CodegenContext *ctx) {
+    for (int i = 0; i < 16; i++) {
+        ctx->used[i] = 0;
     }
-
-    // Generate code for left operand
-    if (node->binary_op.left->type == NODE_IDENTIFIER) {
-        struct Symbol *left_var = lookup_symbol(func->function.locals,
-                                              node->binary_op.left->identifier.name);
-        if (left_var) {
-            add_instruction(text, INSTR_MOV, reg_operand(REG_RAX),
-                          mem_operand(REG_RBP, left_var->variable.offset));
-        }
-    } else if (node->binary_op.left->type == NODE_INTEGER_LITERAL) {
-        add_instruction(text, INSTR_MOV, reg_operand(REG_RAX),
-                       imm_operand(node->binary_op.left->int_literal.value));
-    } else if (node->binary_op.left->type == NODE_BINARY_OPERATION) {
-        generate_binary_operation(text, node->binary_op.left, func);
-    }
-
-    // For division, we need to save the left operand
-    if (strcmp(node->binary_op.operator, "/") == 0) {
-        add_instruction(text, INSTR_PUSH, reg_operand(REG_RAX), reg_operand(REG_RAX));
-    }
-
-    // Generate code for right operand (if not already handled)
-    if (node->binary_op.right->type != NODE_BINARY_OPERATION) {
-        if (node->binary_op.right->type == NODE_IDENTIFIER) {
-            struct Symbol *right_var = lookup_symbol(func->function.locals,
-                                                   node->binary_op.right->identifier.name);
-            if (right_var) {
-                if (strcmp(node->binary_op.operator, "/") == 0) {
-                    add_instruction(text, INSTR_MOV, reg_operand(REG_RBX),
-                                  mem_operand(REG_RBP, right_var->variable.offset));
-                } else {
-                    add_instruction(text, INSTR_MOV, reg_operand(REG_RCX),
-                                  mem_operand(REG_RBP, right_var->variable.offset));
-                }
-            }
-        } else if (node->binary_op.right->type == NODE_INTEGER_LITERAL) {
-            if (strcmp(node->binary_op.operator, "/") == 0) {
-                add_instruction(text, INSTR_MOV, reg_operand(REG_RBX),
-                              imm_operand(node->binary_op.right->int_literal.value));
-            } else {
-                add_instruction(text, INSTR_MOV, reg_operand(REG_RCX),
-                              imm_operand(node->binary_op.right->int_literal.value));
-            }
-        }
-    }
-
-    // For division, restore left operand to RAX
-    if (strcmp(node->binary_op.operator, "/") == 0) {
-        add_instruction(text, INSTR_POP, reg_operand(REG_RAX), reg_operand(REG_RAX));
-    }
-
-    // Perform the operation
-    if (strcmp(node->binary_op.operator, "+") == 0) {
-        add_instruction(text, INSTR_ADD, reg_operand(REG_RAX), reg_operand(REG_RCX));
-    } else if (strcmp(node->binary_op.operator, "-") == 0) {
-        add_instruction(text, INSTR_SUB, reg_operand(REG_RAX), reg_operand(REG_RCX));
-    } else if (strcmp(node->binary_op.operator, "*") == 0) {
-        add_instruction(text, INSTR_MUL, reg_operand(REG_RAX), reg_operand(REG_RCX));
-    } else if (strcmp(node->binary_op.operator, "/") == 0) {
-        // Clear RDX for division
-        add_instruction(text, INSTR_MOV, reg_operand(REG_RDX), imm_operand(0));
-        // Perform division: RAX = RDX:RAX / RBX
-        struct Operand no_op = {0};  // Empty operand for single-operand instructions
-        add_instruction(text, INSTR_DIV, reg_operand(REG_RBX), no_op);
-    }
-
-    // Restore RDX
-    add_instruction(text, INSTR_POP, reg_operand(REG_RDX), reg_operand(REG_RDX));
 }
 
-// Generate code for assignment
-void generate_assignment(struct Section *text, struct ASTNode *node, struct Symbol *func) {
-    // Generate code for right-hand side
-    if (node->assignment.value->type == NODE_INTEGER_LITERAL) {
-        add_instruction(text, INSTR_MOV, reg_operand(REG_RAX),
-                      imm_operand(node->assignment.value->int_literal.value));
-    } else if (node->assignment.value->type == NODE_BINARY_OPERATION) {
-        generate_binary_operation(text, node->assignment.value, func);
-    } else if (node->assignment.value->type == NODE_IDENTIFIER) {
-        struct Symbol *right_var = lookup_symbol(func->function.locals,
-                                               node->assignment.value->identifier.name);
-        if (right_var) {
-            add_instruction(text, INSTR_MOV, reg_operand(REG_RAX),
-                          mem_operand(REG_RBP, right_var->variable.offset));
+// Marks a register as allocated, returns the register ID.
+static int allocate_register(struct CodegenContext *ctx) {
+    // Choose from scratch registers.
+    // No RDX because it's used for division.
+    static int candidate_regs[] = {REG_R10, REG_R11, REG_R12, REG_R13, REG_R14, REG_R15, REG_R8, REG_R9, REG_RBX, REG_RCX};
+    static int count = sizeof(candidate_regs) / sizeof(candidate_regs[0]);
+
+    int i = 0;
+    while (i < count) {
+        int reg = candidate_regs[i];
+        if (!ctx->used[reg]) {
+            ctx->used[reg] = 1;
+            return reg;
         }
+        i++;
+    }
+    // Fallback if we run out of registers:
+    fprintf(stderr, "Ran out of registers for expression.\n");
+    exit(1);
+}
+
+// Frees a register so it can be used again.
+static void free_register(struct CodegenContext *ctx, int reg) {
+    ctx->used[reg] = 0;
+}
+
+// --------------------- Unified Expression Generation -------------------------------
+// Instead of special per-node code in each place, we define one function
+// that recursively generates code for any expression and returns the reg
+// holding the final result.
+
+static int generate_expression(struct Section *text,
+                               struct ASTNode *node,
+                               struct Symbol *func,
+                               struct Assembly *assembly,
+                               struct CodegenContext *ctx);
+
+// Implementation of generate_expression:
+static int generate_expression(struct Section *text,
+                               struct ASTNode *node,
+                               struct Symbol *func,
+                               struct Assembly *assembly,
+                               struct CodegenContext *ctx)
+{
+    if (!node) {
+        // Just return a register holding 0 if needed
+        int dummy_reg = allocate_register(ctx);
+        add_instruction(text, INSTR_MOV, reg_operand(dummy_reg), imm_operand(0));
+        return dummy_reg;
     }
 
-    // Store result in target variable
-    if (node->assignment.target->type == NODE_IDENTIFIER) {
-        struct Symbol *var = lookup_symbol(func->function.locals,
-                                         node->assignment.target->identifier.name);
+    // Integer literal
+    if (node->type == NODE_INTEGER_LITERAL) {
+        int r = allocate_register(ctx);
+        add_instruction(text, INSTR_MOV, reg_operand(r),
+                        imm_operand(node->int_literal.value));
+        return r;
+    }
+
+    // Identifier
+    else if (node->type == NODE_IDENTIFIER) {
+        struct Symbol *var = lookup_symbol(func->function.locals, node->identifier.name);
+        // If not found here, might be in global or parent scope, etc.
         if (var) {
-            add_instruction(text, INSTR_MOV,
-                          mem_operand(REG_RBP, var->variable.offset),
-                          reg_operand(REG_RAX));
+            int r = allocate_register(ctx);
+            add_instruction(text, INSTR_MOV, reg_operand(r),
+                            mem_operand(REG_RBP, var->variable.offset));
+            return r;
         }
+        // fallback error
+        fprintf(stderr, "generate_expression: unknown identifier '%s'\n", node->identifier.name);
+        exit(1);
     }
+
+    // String literal
+    else if (node->type == NODE_STRING_LITERAL) {
+        // Put string in data section, load it with LEA
+        char *label = add_string_literal(assembly, node->string_literal.value);
+        int r = allocate_register(ctx);
+        add_instruction(text, INSTR_LEA, reg_operand(r), label_operand(label));
+        return r;
+    }
+
+    // Function call
+    else if (node->type == NODE_FUNCTION_CALL) {
+        // Save all scratch registers we might overwrite (simple approach):
+        // or pick registers differently for arguments. For simplicity:
+        int reg_args[] = {REG_RDI, REG_RSI, REG_RDX, REG_RCX, REG_R8, REG_R9};
+        // push used scratch regs
+        int i = 0;
+        // For each register that is 'used', push it so we don't clobber
+        while (i < 16) {
+            if (ctx->used[i]) {
+                add_instruction(text, INSTR_PUSH, reg_operand(i), reg_operand(i));
+            }
+            i++;
+        }
+
+        // Evaluate arguments left to right (or right to left) pushing them into reg_args
+        struct ASTNode *arg = node->func_call.arguments;
+        int arg_count = 0;
+        while (arg && arg_count < 6) {
+            int r = generate_expression(text, arg, func, assembly, ctx);
+            add_instruction(text, INSTR_MOV, reg_operand(reg_args[arg_count]), reg_operand(r));
+            free_register(ctx, r); // done with that temp
+            arg = arg->next;
+            arg_count++;
+        }
+        // Clear AL for variadic calls
+        add_instruction(text, INSTR_MOV, reg_operand(REG_RAX), imm_operand(0));
+
+        // Call the function
+        add_instruction(text, INSTR_CALL, label_operand(node->func_call.name),
+                        label_operand(node->func_call.name));
+
+        // Move return value from RAX to a new scratch register
+        int result_reg = allocate_register(ctx);
+        add_instruction(text, INSTR_MOV, reg_operand(result_reg), reg_operand(REG_RAX));
+
+        // Pop saved scratch regs
+        i = 16;
+        while (i--) {
+            if (ctx->used[i]) {
+                add_instruction(text, INSTR_POP, reg_operand(i), reg_operand(i));
+            }
+        }
+
+        return result_reg;
+    }
+
+    // Binary operation: left op right
+    else if (node->type == NODE_BINARY_OPERATION) {
+        // Depth-first: evaluate left
+        int left_reg = generate_expression(text, node->binary_op.left, func, assembly, ctx);
+        // Evaluate right
+        int right_reg = generate_expression(text, node->binary_op.right, func, assembly, ctx);
+
+        // Perform the operation
+        if (strcmp(node->binary_op.operator, "+") == 0) {
+            add_instruction(text, INSTR_ADD,
+                            reg_operand(left_reg), reg_operand(right_reg));
+        } else if (strcmp(node->binary_op.operator, "-") == 0) {
+            add_instruction(text, INSTR_SUB,
+                            reg_operand(left_reg), reg_operand(right_reg));
+        } else if (strcmp(node->binary_op.operator, "*") == 0) {
+            add_instruction(text, INSTR_MUL,
+                            reg_operand(left_reg), reg_operand(right_reg));
+        } else if (strcmp(node->binary_op.operator, "/") == 0) {
+            // We need RDX cleared and RAX=left_reg. Then we div by right_reg.
+            // Move left_reg -> RAX:
+            add_instruction(text, INSTR_MOV, reg_operand(REG_RAX), reg_operand(left_reg));
+            add_instruction(text, INSTR_MOV, reg_operand(REG_RDX), imm_operand(0));
+            // Actually do the division
+            struct Operand no_op = {0};
+            add_instruction(text, INSTR_DIV, reg_operand(right_reg), no_op);
+            // RAX now has the result
+            // free left_reg (we don't need it anymore)
+            free_register(ctx, left_reg);
+            free_register(ctx, right_reg);
+
+            // allocate a fresh scratch for the result and move from RAX
+            int div_res = allocate_register(ctx);
+            add_instruction(text, INSTR_MOV,
+                            reg_operand(div_res), reg_operand(REG_RAX));
+            return div_res;
+        }
+
+        // If it wasn't division, then left_reg now holds the result.
+        free_register(ctx, right_reg);
+        // We keep left_reg as final result
+        return left_reg;
+    }
+
+    // Assignment: target = value
+    else if (node->type == NODE_ASSIGNMENT) {
+        // Evaluate the right-hand side
+        int value_reg = generate_expression(text, node->assignment.value, func, assembly, ctx);
+
+        // target must be an identifier
+        if (node->assignment.target->type == NODE_IDENTIFIER) {
+            struct Symbol *var = lookup_symbol(func->function.locals,
+                                               node->assignment.target->identifier.name);
+            if (!var) {
+                fprintf(stderr, "Assignment to unknown variable '%s'\n",
+                        node->assignment.target->identifier.name);
+                exit(1);
+            }
+            // store it
+            add_instruction(text, INSTR_MOV,
+                            mem_operand(REG_RBP, var->variable.offset),
+                            reg_operand(value_reg));
+        }
+        free_register(ctx, value_reg);
+
+        // No special "result" register for an assignment, but
+        // return a register with the assigned value if you prefer:
+        int dummy_reg = allocate_register(ctx);
+        add_instruction(text, INSTR_MOV, reg_operand(dummy_reg), imm_operand(0));
+        return dummy_reg;
+    }
+
+    fprintf(stderr, "generate_expression: unhandled node type %d\n", node->type);
+    exit(1);
 }
 
-// Main code generation function
+// ------------------- Function that generates code for the entire AST -------------------
+
+// We show only the parts of generate_code function or function body code that remove
+// the old special cases and call generate_expression.
+
+// ...
 struct Assembly *generate_code(struct ASTNode *ast, struct SemanticContext *context) {
     struct Assembly *assembly = create_assembly();
-
-    // Add printf as external symbol
     add_extern_symbol(assembly, "printf");
 
-    // Create text section
     struct Section *text = create_section(".text");
-    text->next = NULL;
     assembly->sections = text;
 
-    // Generate code for each function in the AST
+    // For each function in the AST
     struct ASTNode *current = ast;
     while (current) {
         if (current->type == NODE_FUNCTION_DECLARATION) {
-            // Get function's symbol table and stack size
-            struct Symbol *func = lookup_symbol(context->global_scope, current->function_decl.name);
-            if (!func) continue;  // Should never happen after semantic analysis
+            struct Symbol *func = lookup_symbol(context->global_scope,
+                                                current->function_decl.name);
+            if (!func) continue;
 
             // Add function label
             struct Instruction *label = malloc(sizeof(struct Instruction));
@@ -476,138 +588,55 @@ struct Assembly *generate_code(struct ASTNode *ast, struct SemanticContext *cont
                 }
             }
 
-            // Generate code for function body
+            // We'll have a codegen context for each function,
+            // re-initialized per statement. Named variables remain on stack after each statement.
+            struct CodegenContext ctx_stmt;  // local
             struct ASTNode *body = current->function_decl.body;
             int has_return = 0;
+
             while (body) {
+                // Re-init context each statement
+                init_codegen_context(&ctx_stmt);
+
                 if (body->type == NODE_VARIABLE_DECLARATION) {
+                    // If there's an initializer, we use generate_expression:
                     if (body->var_decl.value) {
-                        struct Symbol *var = lookup_symbol(func->function.locals, body->var_decl.name);
-                        if (var) {
-                            if (body->var_decl.value->type == NODE_INTEGER_LITERAL) {
-                                add_instruction(text, INSTR_MOV,
-                                             mem_operand(REG_RBP, var->variable.offset),
-                                             imm_operand(body->var_decl.value->int_literal.value));
-                            } else if (body->var_decl.value->type == NODE_BINARY_OPERATION) {
-                                generate_binary_operation(text, body->var_decl.value, func);
-                                add_instruction(text, INSTR_MOV,
-                                            mem_operand(REG_RBP, var->variable.offset),
-                                            reg_operand(REG_RAX));
-                            } else if (body->var_decl.value->type == NODE_FUNCTION_CALL) {
-                                // Save registers that might be clobbered by the function call
-                                add_instruction(text, INSTR_PUSH, reg_operand(REG_RDI), reg_operand(REG_RDI));
-                                add_instruction(text, INSTR_PUSH, reg_operand(REG_RSI), reg_operand(REG_RSI));
-
-                                // Process function arguments
-                                struct ASTNode *arg = body->var_decl.value->func_call.arguments;
-                                int reg_args[] = {REG_RDI, REG_RSI, REG_RDX, REG_RCX, REG_R8, REG_R9};
-                                int arg_count = 0;
-
-                                while (arg && arg_count < 6) {
-                                    if (arg->type == NODE_INTEGER_LITERAL) {
-                                        add_instruction(text, INSTR_MOV, reg_operand(reg_args[arg_count]),
-                                                     imm_operand(arg->int_literal.value));
-                                    }
-                                    arg_count++;
-                                    arg = arg->next;
-                                }
-
-                                // Call the function
-                                add_instruction(text, INSTR_CALL, label_operand(body->var_decl.value->func_call.name),
-                                             label_operand(body->var_decl.value->func_call.name));
-
-                                // Store the return value
-                                add_instruction(text, INSTR_MOV,
-                                             mem_operand(REG_RBP, var->variable.offset),
-                                             reg_operand(REG_RAX));
-
-                                // Restore saved registers
-                                add_instruction(text, INSTR_POP, reg_operand(REG_RSI), reg_operand(REG_RSI));
-                                add_instruction(text, INSTR_POP, reg_operand(REG_RDI), reg_operand(REG_RDI));
-                            }
-                        }
-                    }
-                } else if (body->type == NODE_BINARY_OPERATION) {
-                    generate_binary_operation(text, body, func);
-                } else if (body->type == NODE_ASSIGNMENT) {
-                    generate_assignment(text, body, func);
-                } else if (body->type == NODE_FUNCTION_CALL) {
-                    if (strcmp(body->func_call.name, "printf") == 0) {
-                        // Save registers we need to preserve
-                        add_instruction(text, INSTR_PUSH, reg_operand(REG_RDI), reg_operand(REG_RDI));
-                        add_instruction(text, INSTR_PUSH, reg_operand(REG_RSI), reg_operand(REG_RSI));
-                        add_instruction(text, INSTR_PUSH, reg_operand(REG_RDX), reg_operand(REG_RDX));
-                        add_instruction(text, INSTR_PUSH, reg_operand(REG_RCX), reg_operand(REG_RCX));
-                        add_instruction(text, INSTR_PUSH, reg_operand(REG_R8), reg_operand(REG_R8));
-                        add_instruction(text, INSTR_PUSH, reg_operand(REG_R9), reg_operand(REG_R9));
-
-                        // Process format string
-                        struct ASTNode *arg = body->func_call.arguments;
-                        if (arg && arg->type == NODE_STRING_LITERAL) {
-                            char *label = add_string_literal(assembly, arg->string_literal.value);
-                            add_instruction(text, INSTR_LEA, reg_operand(REG_RDI),
-                                         label_operand(label));
-                            arg = arg->next;
-                        }
-
-                        // Process remaining arguments
-                        int reg_args[] = {REG_RSI, REG_RDX, REG_RCX, REG_R8, REG_R9};
-                        int arg_count = 0;
-
-                        while (arg && arg_count < 6) {
-                            if (arg->type == NODE_IDENTIFIER) {
-                                struct Symbol *var = lookup_symbol(func->function.locals,
-                                                               arg->identifier.name);
-                                if (var) {
-                                    add_instruction(text, INSTR_MOV, reg_operand(reg_args[arg_count]),
-                                                 mem_operand(REG_RBP, var->variable.offset));
-                                }
-                            } else if (arg->type == NODE_INTEGER_LITERAL) {
-                                add_instruction(text, INSTR_MOV, reg_operand(reg_args[arg_count]),
-                                             imm_operand(arg->int_literal.value));
-                            }
-                            arg_count++;
-                            arg = arg->next;
-                        }
-
-                        // Clear AL register (needed for variadic functions)
-                        add_instruction(text, INSTR_MOV, reg_operand(REG_RAX), imm_operand(0));
-
-                        // Call printf
-                        add_instruction(text, INSTR_CALL, label_operand("printf"),
-                                     label_operand("printf"));
-
-                        // Restore saved registers in reverse order
-                        add_instruction(text, INSTR_POP, reg_operand(REG_R9), reg_operand(REG_R9));
-                        add_instruction(text, INSTR_POP, reg_operand(REG_R8), reg_operand(REG_R8));
-                        add_instruction(text, INSTR_POP, reg_operand(REG_RCX), reg_operand(REG_RCX));
-                        add_instruction(text, INSTR_POP, reg_operand(REG_RDX), reg_operand(REG_RDX));
-                        add_instruction(text, INSTR_POP, reg_operand(REG_RSI), reg_operand(REG_RSI));
-                        add_instruction(text, INSTR_POP, reg_operand(REG_RDI), reg_operand(REG_RDI));
-                    }
-                } else if (body->type == NODE_RETURN_STATEMENT) {
-                    has_return = 1;
-                    if (body->return_stmt.value->type == NODE_INTEGER_LITERAL) {
-                        add_instruction(text, INSTR_MOV, reg_operand(REG_RAX),
-                                     imm_operand(body->return_stmt.value->int_literal.value));
-                    } else if (body->return_stmt.value->type == NODE_IDENTIFIER) {
+                        int reg = generate_expression(text, body->var_decl.value,
+                                                      func, assembly, &ctx_stmt);
+                        // store to stack
                         struct Symbol *var = lookup_symbol(func->function.locals,
-                                                       body->return_stmt.value->identifier.name);
-                        if (var) {
-                            add_instruction(text, INSTR_MOV, reg_operand(REG_RAX),
-                                         mem_operand(REG_RBP, var->variable.offset));
-                        }
+                                                           body->var_decl.name);
+                        add_instruction(text, INSTR_MOV,
+                                        mem_operand(REG_RBP, var->variable.offset),
+                                        reg_operand(reg));
+                        free_register(&ctx_stmt, reg);
                     }
+                }
+                else if (body->type == NODE_RETURN_STATEMENT) {
+                    // Generate the expression into a register
+                    int reg = generate_expression(text, body->return_stmt.value,
+                                                  func, assembly, &ctx_stmt);
+                    // Move that register into RAX
+                    add_instruction(text, INSTR_MOV, reg_operand(REG_RAX),
+                                    reg_operand(reg));
+                    free_register(&ctx_stmt, reg);
+                    has_return = 1;
 
                     // Function epilogue and return
                     add_instruction(text, INSTR_MOV, reg_operand(REG_RSP), reg_operand(REG_RBP));
                     add_instruction(text, INSTR_POP, reg_operand(REG_RBP), reg_operand(REG_RBP));
                     add_instruction(text, INSTR_RET, reg_operand(REG_RAX), reg_operand(REG_RAX));
                 }
+                else {
+                    // For function calls, assignments, binary ops, etc.
+                    // we just call generate_expression and discard if needed
+                    generate_expression(text, body, func, assembly, &ctx_stmt);
+                }
+
+                // Next statement
                 body = body->next;
             }
 
-            // If we didn't return in the function body, add the epilogue here
             if (!has_return) {
                 add_instruction(text, INSTR_MOV, reg_operand(REG_RSP), reg_operand(REG_RBP));
                 add_instruction(text, INSTR_POP, reg_operand(REG_RBP), reg_operand(REG_RBP));
@@ -619,3 +648,4 @@ struct Assembly *generate_code(struct ASTNode *ast, struct SemanticContext *cont
 
     return assembly;
 }
+// ... end of codegen.h changes
