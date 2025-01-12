@@ -421,11 +421,17 @@ static int generate_expression(struct Section *text,
 
     // Function call
     else if (node->type == NODE_FUNCTION_CALL) {
-        // Save all caller saved registers used by the current function.
+        // Save the current usage state.
+        int saved_used[REG_COUNT];
+        memcpy(saved_used, ctx->used, sizeof(saved_used));
+
+        // Push only the *actually in-use* scratch registers, and mark them as free.
+        // We only use caller saved registers as scratch, so we can push all of them.
         int i = 0;
         while (i < REG_COUNT) {
             if (ctx->used[i]) {
                 add_instruction(text, INSTR_PUSH, reg_operand(i + 1), reg_operand(i + 1));
+                ctx->used[i] = 0;
             }
             i++;
         }
@@ -439,7 +445,8 @@ static int generate_expression(struct Section *text,
             if (reg_args[arg_count] != r) {
                 add_instruction(text, INSTR_MOV, reg_operand(reg_args[arg_count]), reg_operand(r));
             }
-            free_register(ctx, r); // done with that temp
+            // Free the temporary holding this argument.
+            free_register(ctx, r);
 
             // Mark this argument register as used so it doesn't get reused when
             // evaluating the next argument
@@ -454,16 +461,18 @@ static int generate_expression(struct Section *text,
         add_instruction(text, INSTR_CALL, label_operand(node->func_call.name),
                         label_operand(node->func_call.name));
 
-        // Pop saved scratch regs
+        // Pop and restore the usage state for all registers we saved.
         i = REG_COUNT - 1;
         while (i >= 0) {
-            if (ctx->used[i]) {
+            if (saved_used[i]) {
                 add_instruction(text, INSTR_POP, reg_operand(i + 1), reg_operand(i + 1));
             }
+            // Restore usage state exactly as it was before.
+            ctx->used[i] = saved_used[i];
             i--;
         }
 
-        // Move return value from RAX to a new scratch register
+        // The returned value is in RAX. We want it in a fresh temporary register.
         int result_reg = allocate_register(ctx);
         add_instruction(text, INSTR_MOV, reg_operand(result_reg), reg_operand(REG_RAX));
 
