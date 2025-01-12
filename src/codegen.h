@@ -25,7 +25,7 @@
 #define OPERAND_MEMORY 3
 #define OPERAND_LABEL 4
 
-// Common x86-64 registers
+// All x86-64 64-bit registers
 #define REG_RAX 1
 #define REG_RBX 2
 #define REG_RCX 3
@@ -42,6 +42,22 @@
 #define REG_R13 14
 #define REG_R14 15
 #define REG_R15 16
+
+#define REG_COUNT 16
+
+// All used temp regs are caller saved, which avoid needing to handle
+// push/pop at the function level for callee saved registers.
+// We also don't use RAX for simplicity.
+static const int TEMP_REGS[] = {
+    REG_R10,  // Never used for params, good first choice
+    REG_R11,  // Never used for params
+    REG_R9,   // Only used for 6th param (rare)
+    REG_R8,   // Only used for 5th
+    REG_RCX,  // 4th param
+    REG_RDX,  // 3rd param
+    REG_RSI,  // 2nd param
+    REG_RDI   // 1st param (used most often for params)
+};
 
 // Represents an operand in an assembly instruction
 struct Operand {
@@ -313,28 +329,25 @@ void print_assembly(FILE *out, struct Assembly *assembly) {
 // For simplicity, we store a small fixed array of possible scratch registers.
 // "used[i] = 1" if that register is already allocated, 0 if free.
 struct CodegenContext {
-    int used[16];  // Enough space for up to R15 if you want
+    int used[REG_COUNT];
 };
 
 // Initializes all registers as free.
 static void init_codegen_context(struct CodegenContext *ctx) {
-    for (int i = 0; i < 16; i++) {
+    for (int i = 0; i < REG_COUNT; i++) {
         ctx->used[i] = 0;
     }
 }
 
+
+
 // Marks a register as allocated, returns the register ID.
 static int allocate_register(struct CodegenContext *ctx) {
-    // Choose from scratch registers.
-    // No RDX because it's used for division.
-    static int candidate_regs[] = {REG_R10, REG_R11, REG_R12, REG_R13, REG_R14, REG_R15, REG_R8, REG_R9, REG_RBX, REG_RCX};
-    static int count = sizeof(candidate_regs) / sizeof(candidate_regs[0]);
-
-    int i = 0;
-    while (i < count) {
-        int reg = candidate_regs[i];
-        if (!ctx->used[reg]) {
-            ctx->used[reg] = 1;
+    size_t i = 0;
+    while (i < sizeof(TEMP_REGS) / sizeof(TEMP_REGS[0])) {
+        int reg = TEMP_REGS[i];
+        if (!ctx->used[reg - 1]) {
+            ctx->used[reg - 1] = 1;
             return reg;
         }
         i++;
@@ -346,7 +359,7 @@ static int allocate_register(struct CodegenContext *ctx) {
 
 // Frees a register so it can be used again.
 static void free_register(struct CodegenContext *ctx, int reg) {
-    ctx->used[reg] = 0;
+    ctx->used[reg - 1] = 0;
 }
 
 // --------------------- Unified Expression Generation -------------------------------
@@ -408,20 +421,17 @@ static int generate_expression(struct Section *text,
 
     // Function call
     else if (node->type == NODE_FUNCTION_CALL) {
-        // Save all scratch registers we might overwrite (simple approach):
-        // or pick registers differently for arguments. For simplicity:
-        int reg_args[] = {REG_RDI, REG_RSI, REG_RDX, REG_RCX, REG_R8, REG_R9};
-        // push used scratch regs
+        // Save all caller saved registers
         int i = 0;
-        // For each register that is 'used', push it so we don't clobber
-        while (i < 16) {
+        while (i < REG_COUNT) {
             if (ctx->used[i]) {
-                add_instruction(text, INSTR_PUSH, reg_operand(i), reg_operand(i));
+                add_instruction(text, INSTR_PUSH, reg_operand(i + 1), reg_operand(i + 1));
             }
             i++;
         }
 
-        // Evaluate arguments left to right (or right to left) pushing them into reg_args
+        // Evaluate arguments left to right pushing them into reg_args
+        int reg_args[] = {REG_RDI, REG_RSI, REG_RDX, REG_RCX, REG_R8, REG_R9};
         struct ASTNode *arg = node->func_call.arguments;
         int arg_count = 0;
         while (arg && arg_count < 6) {
@@ -443,11 +453,12 @@ static int generate_expression(struct Section *text,
         add_instruction(text, INSTR_MOV, reg_operand(result_reg), reg_operand(REG_RAX));
 
         // Pop saved scratch regs
-        i = 16;
-        while (i--) {
+        i = REG_COUNT - 1;
+        while (i >= 0) {
             if (ctx->used[i]) {
-                add_instruction(text, INSTR_POP, reg_operand(i), reg_operand(i));
+                add_instruction(text, INSTR_POP, reg_operand(i + 1), reg_operand(i + 1));
             }
+            i--;
         }
 
         return result_reg;
@@ -648,4 +659,3 @@ struct Assembly *generate_code(struct ASTNode *ast, struct SemanticContext *cont
 
     return assembly;
 }
-// ... end of codegen.h changes
