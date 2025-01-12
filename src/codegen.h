@@ -448,10 +448,6 @@ static int generate_expression(struct Section *text,
         add_instruction(text, INSTR_CALL, label_operand(node->func_call.name),
                         label_operand(node->func_call.name));
 
-        // Move return value from RAX to a new scratch register
-        int result_reg = allocate_register(ctx);
-        add_instruction(text, INSTR_MOV, reg_operand(result_reg), reg_operand(REG_RAX));
-
         // Pop saved scratch regs
         i = REG_COUNT - 1;
         while (i >= 0) {
@@ -460,6 +456,10 @@ static int generate_expression(struct Section *text,
             }
             i--;
         }
+
+        // Move return value from RAX to a new scratch register
+        int result_reg = allocate_register(ctx);
+        add_instruction(text, INSTR_MOV, reg_operand(result_reg), reg_operand(REG_RAX));
 
         return result_reg;
     }
