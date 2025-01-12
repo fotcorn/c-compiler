@@ -486,22 +486,60 @@ static int generate_expression(struct Section *text,
             add_instruction(text, INSTR_MUL,
                             reg_operand(left_reg), reg_operand(right_reg));
         } else if (strcmp(node->binary_op.operator, "/") == 0) {
-            // We need RDX cleared and RAX=left_reg. Then we div by right_reg.
-            // Move left_reg -> RAX:
-            add_instruction(text, INSTR_MOV, reg_operand(REG_RAX), reg_operand(left_reg));
+            // 1. If RDX is used for some *other* expression (not left or right),
+            //    then we need to move that occupant out of RDX so we can safely zero RDX.
+            //    We'll check if ctx->used[REG_RDX - 1] == 1
+            //    but RDX is NOT (left_reg) and NOT (right_reg).
+            if (ctx->used[REG_RDX - 1] == 1) {
+                if (left_reg != REG_RDX && right_reg != REG_RDX) {
+                    // Some other temp is in RDX, so we must move it out.
+                    int spare = allocate_register(ctx);
+                    add_instruction(text, INSTR_MOV, reg_operand(spare), reg_operand(REG_RDX));
+                    // Now we have that occupant in 'spare', so we can free RDX.
+                    free_register(ctx, REG_RDX);
+                }
+            }
+
+            // 2. If the left operand is in RDX, we can move it straight to RAX.
+            //    That way, we're not losing its value when we zero RDX.
+            if (left_reg == REG_RDX) {
+                add_instruction(text, INSTR_MOV, reg_operand(REG_RAX), reg_operand(REG_RDX));
+                free_register(ctx, REG_RDX);
+                left_reg = REG_RAX;
+            }
+
+            // 3. If the right operand is in RDX, we must move it to another temp
+            //    so as not to lose it when we zero RDX.
+            if (right_reg == REG_RDX) {
+                int tmp = allocate_register(ctx);
+                add_instruction(text, INSTR_MOV, reg_operand(tmp), reg_operand(REG_RDX));
+                free_register(ctx, REG_RDX);
+                right_reg = tmp;
+            }
+
+            // 4. Move 'left' into RAX if it's not already there.
+            //    Then we can free left_reg from the context.
+            if (left_reg != REG_RAX) {
+                add_instruction(text, INSTR_MOV, reg_operand(REG_RAX), reg_operand(left_reg));
+                free_register(ctx, left_reg);
+            } else {
+                // If left_reg == RAX, we just free it in the context
+                free_register(ctx, left_reg);
+            }
+
+            // 5. Zero out RDX before idiv (RDX:RAX is the dividend).
             add_instruction(text, INSTR_MOV, reg_operand(REG_RDX), imm_operand(0));
-            // Actually do the division
+
+            // 6. Perform IDIV by the right operand → result appears in RAX.
             struct Operand no_op = {0};
             add_instruction(text, INSTR_DIV, reg_operand(right_reg), no_op);
-            // RAX now has the result
-            // free left_reg (we don't need it anymore)
-            free_register(ctx, left_reg);
+
+            // 7. We no longer need the right_reg operand.
             free_register(ctx, right_reg);
 
-            // allocate a fresh scratch for the result and move from RAX
+            // 8. The final result is in RAX. Allocate a fresh scratch reg to hold it.
             int div_res = allocate_register(ctx);
-            add_instruction(text, INSTR_MOV,
-                            reg_operand(div_res), reg_operand(REG_RAX));
+            add_instruction(text, INSTR_MOV, reg_operand(div_res), reg_operand(REG_RAX));
             return div_res;
         }
 
