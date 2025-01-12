@@ -421,7 +421,7 @@ static int generate_expression(struct Section *text,
 
     // Function call
     else if (node->type == NODE_FUNCTION_CALL) {
-        // Save all caller saved registers
+        // Save all caller saved registers used by the current function.
         int i = 0;
         while (i < REG_COUNT) {
             if (ctx->used[i]) {
@@ -436,7 +436,9 @@ static int generate_expression(struct Section *text,
         int arg_count = 0;
         while (arg && arg_count < 6) {
             int r = generate_expression(text, arg, func, assembly, ctx);
-            add_instruction(text, INSTR_MOV, reg_operand(reg_args[arg_count]), reg_operand(r));
+            if (reg_args[arg_count] != r) {
+                add_instruction(text, INSTR_MOV, reg_operand(reg_args[arg_count]), reg_operand(r));
+            }
             free_register(ctx, r); // done with that temp
 
             // Mark this argument register as used so it doesn't get reused when
