@@ -204,14 +204,12 @@ void analyze_function_declaration(struct ASTNode *node, struct SemanticContext *
 
     // Add parameters to function's local scope
     for (int i = 0; i < node->function_decl.param_count; i++) {
-        // Parameters are pushed in reverse order, so they have positive offsets from rbp
-        // First param at 16(%rbp), second at 24(%rbp), etc. (8(%rbp) is return address)
-        int param_offset = 16 + (i * 8);
-
+        // Parameters are stored in negative offsets like other locals
+        context->current_stack_offset -= 8;
         struct Symbol *param_sym = create_variable_symbol(
             node->function_decl.parameters[i].name,
             node->function_decl.parameters[i].type,
-            param_offset
+            context->current_stack_offset
         );
         add_symbol(context->current_scope, param_sym);
     }
