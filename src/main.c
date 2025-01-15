@@ -6,6 +6,7 @@
 #include "parser.h"
 #include "sema.h"
 #include "codegen.h"
+#include "print_assembly.h"
 
 int main(int argc, char *argv[]) {
   char *input = NULL;

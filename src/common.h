@@ -186,3 +186,47 @@ struct SemanticContext {
 
 // Symbol table functions
 struct Symbol *lookup_symbol(struct SymbolTable *scope, const char *name);
+
+// Represents an operand in an assembly instruction
+struct Operand {
+    int type;
+    union {
+        int reg;            // For register operands
+        int immediate;      // For immediate values
+        struct {
+            int base_reg;   // Base register for memory operands
+            int offset;     // Offset for memory operands
+        } mem;
+        char *label;        // For labels and function names
+    };
+};
+
+// Represents a single assembly instruction
+struct Instruction {
+    int type;
+    struct Operand dest;
+    struct Operand src;
+    struct Instruction *next;
+};
+
+// Represents a section of assembly code
+struct Section {
+    char *name;
+    struct Instruction *instructions;
+    struct Section *next;
+};
+
+// String literals for the data section
+struct StringLiteral {
+    char *label;
+    char *value;
+    struct StringLiteral *next;
+};
+
+// Represents the complete assembly program
+struct Assembly {
+    struct Section *sections;
+    char **extern_symbols;  // Array of external symbols (e.g., printf)
+    int extern_count;
+    struct StringLiteral *string_literals;
+};
