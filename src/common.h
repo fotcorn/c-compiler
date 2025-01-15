@@ -130,3 +130,59 @@ struct ASTNode {
   };
   struct ASTNode *next; // For linked list of statements
 };
+
+// Symbol types
+#define SYMBOL_VARIABLE 1
+#define SYMBOL_FUNCTION 2
+#define SYMBOL_STRUCT 3
+
+// Forward declaration of SymbolTable
+struct SymbolTable;
+
+// Symbol information
+struct Symbol {
+    char *name;
+    int type;
+    union {
+        struct {
+            char *data_type;
+            int offset;      // Stack offset from RBP
+            int size;       // Size in bytes
+        } variable;
+
+        struct {
+            char *return_type;
+            int param_count;
+            char **param_types;
+            int stack_size;  // Total stack frame size
+            struct SymbolTable *locals;  // Local variables
+        } function;
+
+        struct {
+            int total_size;  // Total struct size
+            int field_count;
+            struct Symbol **fields;  // Array of field symbols
+        } struct_info;
+    };
+    struct SymbolTable *scope;  // Points to nested scope if this symbol creates one
+};
+
+// Symbol table for tracking scopes
+struct SymbolTable {
+    struct Symbol **symbols;
+    int count;
+    int capacity;
+    struct SymbolTable *parent;  // Parent scope
+};
+
+// Semantic analysis context
+struct SemanticContext {
+    struct SymbolTable *current_scope;
+    struct SymbolTable *global_scope;  // Keep track of global scope
+    char *current_function;  // Name of function being analyzed
+    int had_error;
+    int current_stack_offset;  // Track current stack offset for variables
+};
+
+// Symbol table functions
+struct Symbol *lookup_symbol(struct SymbolTable *scope, const char *name);
