@@ -24,6 +24,8 @@ static struct Token *advance(struct Parser *parser);
 static int is_at_end(struct Parser *parser);
 static void expect(struct Parser *parser, int token_type, const char *message);
 static struct ASTNode *parse_arguments(struct Parser *parser);
+static struct ASTNode *parse_equality(struct Parser *parser);
+static struct ASTNode *parse_additive(struct Parser *parser);
 
 // Implement the parse function
 struct ASTNode *parse(struct TokenArray *tokens, char *input) {
@@ -243,8 +245,36 @@ static struct ASTNode *parse_statement(struct Parser *parser) {
   return expr;
 }
 
-// Parse an expression (handles +, -)
+// Modified expression parsing with proper precedence
 static struct ASTNode *parse_expression(struct Parser *parser) {
+    return parse_equality(parser);
+}
+
+// Handles == and !=
+static struct ASTNode *parse_equality(struct Parser *parser) {
+    struct ASTNode *node = parse_additive(parser);
+
+    while (match(parser, TOKEN_EQUAL_EQUAL) || match(parser, TOKEN_NOT_EQUAL)) {
+        struct Token *op_token = advance(parser);
+        char *operator = strndup(&parser->input[op_token->start], 
+                               op_token->end - op_token->start);
+
+        struct ASTNode *right = parse_additive(parser);
+
+        struct ASTNode *bin_node = malloc(sizeof(struct ASTNode));
+        bin_node->type = NODE_BINARY_OPERATION;
+        bin_node->binary_op.operator = operator;
+        bin_node->binary_op.left = node;
+        bin_node->binary_op.right = right;
+        bin_node->next = NULL;
+
+        node = bin_node;
+    }
+    return node;
+}
+
+// Renamed from original parse_expression
+static struct ASTNode *parse_additive(struct Parser *parser) {
     struct ASTNode *node = parse_term(parser);
 
     while (match(parser, TOKEN_PLUS) || match(parser, TOKEN_MINUS)) {
@@ -253,7 +283,6 @@ static struct ASTNode *parse_expression(struct Parser *parser) {
 
         struct ASTNode *right = parse_term(parser);
 
-        // Create binary operation node
         struct ASTNode *bin_node = malloc(sizeof(struct ASTNode));
         bin_node->type = NODE_BINARY_OPERATION;
         bin_node->binary_op.operator = strndup(&operator, 1);

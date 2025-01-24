@@ -19,6 +19,7 @@ const char *reg_to_str(int reg) {
     if (reg == REG_R13) return "r13";
     if (reg == REG_R14) return "r14";
     if (reg == REG_R15) return "r15";
+    if (reg == REG_AL)  return "al";
     return "unknown";
 }
 
@@ -35,6 +36,9 @@ const char *instr_to_str(int type) {
     if (type == INSTR_MUL) return "imulq";
     if (type == INSTR_DIV) return "idivq";
     if (type == INSTR_LABEL) return "label";
+    if (type == INSTR_CMP) return "cmpq";
+    if (type == INSTR_SET_EQ) return "sete";
+    if (type == INSTR_MOVZX) return "movzbq";
     return "unknown";
 }
 
@@ -63,6 +67,13 @@ void print_operand(FILE *out, struct Operand op) {
 // Print an instruction
 void print_instruction(FILE *out, struct Instruction *instr) {
     fprintf(out, "    %s ", instr_to_str(instr->type));
+
+    // Special case for SETE which has one operand
+    if (instr->type == INSTR_SET_EQ) {
+        print_operand(out, instr->dest);
+        fprintf(out, "\n");
+        return;
+    }
 
     // Special case for RET which has no operands
     if (instr->type == INSTR_RET) {

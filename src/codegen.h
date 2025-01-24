@@ -15,6 +15,9 @@
 #define INSTR_MUL 9
 #define INSTR_DIV 10
 #define INSTR_LABEL 11
+#define INSTR_CMP 12
+#define INSTR_SET_EQ 13
+#define INSTR_MOVZX 14
 
 // Operand types
 #define OPERAND_REGISTER 1
@@ -39,6 +42,7 @@
 #define REG_R13 14
 #define REG_R14 15
 #define REG_R15 16
+#define REG_AL 17
 
 #define REG_COUNT 16
 
@@ -368,6 +372,20 @@ static int generate_expression(struct Section *text,
             int div_res = allocate_register(ctx);
             add_instruction(text, INSTR_MOV, reg_operand(div_res), reg_operand(REG_RAX));
             return div_res;
+        } else if (strcmp(node->binary_op.operator, "==") == 0) {
+            // Compare left and right values
+            add_instruction(text, INSTR_CMP, reg_operand(left_reg), reg_operand(right_reg));
+            
+            // Set AL to 1 if equal, 0 otherwise
+            add_instruction(text, INSTR_SET_EQ, reg_operand(REG_AL), reg_operand(REG_AL));
+            
+            // Move zero-extended byte to result register
+            int result_reg = allocate_register(ctx);
+            add_instruction(text, INSTR_MOVZX, reg_operand(result_reg), reg_operand(REG_AL));
+            
+            free_register(ctx, left_reg);
+            free_register(ctx, right_reg);
+            return result_reg;
         }
 
         // If it wasn't division, then left_reg now holds the result.
