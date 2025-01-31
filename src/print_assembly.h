@@ -38,6 +38,7 @@ const char *instr_to_str(int type) {
     if (type == INSTR_LABEL) return "label";
     if (type == INSTR_CMP) return "cmpq";
     if (type == INSTR_SET_EQ) return "sete";
+    if (type == INSTR_SET_NE) return "setne";
     if (type == INSTR_MOVZX) return "movzbq";
     return "unknown";
 }
@@ -69,7 +70,7 @@ void print_instruction(FILE *out, struct Instruction *instr) {
     fprintf(out, "    %s ", instr_to_str(instr->type));
 
     // Special case for SETE which has one operand
-    if (instr->type == INSTR_SET_EQ) {
+    if (instr->type == INSTR_SET_EQ || instr->type == INSTR_SET_NE) {
         print_operand(out, instr->dest);
         fprintf(out, "\n");
         return;
