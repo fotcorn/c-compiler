@@ -1,6 +1,9 @@
 #include <stdio.h>
 #include "common.h"
 
+// Add forward declaration at the top
+void print_symbol_table(struct SymbolTable *table, int indent);
+
 // Print a single symbol's information
 void print_symbol(struct Symbol *symbol, int indent) {
     for (int i = 0; i < indent; i++) printf("  ");
