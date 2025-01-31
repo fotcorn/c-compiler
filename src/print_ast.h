@@ -36,6 +36,12 @@ void print_ast(struct ASTNode *node, int indent) {
       }
     } else if (node->type == NODE_STRING_LITERAL) {
       printf("StringLiteral: %s\n", node->string_literal.value);
+    } else if (node->type == NODE_IF_STATEMENT) {
+      printf("IfStatement\n");
+      printf("  Condition:\n");
+      print_ast(node->if_stmt.condition, indent + 2);
+      printf("  Body:\n");
+      print_ast(node->if_stmt.body, indent + 2);
     } else {
       printf("Unknown node type\n");
     }

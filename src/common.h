@@ -58,6 +58,7 @@ struct TokenArray {
 #define NODE_RETURN_STATEMENT 8
 #define NODE_STRING_LITERAL 9
 #define NODE_ASSIGNMENT 10
+#define NODE_IF_STATEMENT 11
 
 // Forward declaration of ASTNode
 struct ASTNode;
@@ -127,6 +128,12 @@ struct ASTNode {
       struct ASTNode *target;
       struct ASTNode *value;
     } assignment;
+
+    // If statement
+    struct {
+      struct ASTNode *condition;
+      struct ASTNode *body;
+    } if_stmt;
   };
   struct ASTNode *next; // For linked list of statements
 };

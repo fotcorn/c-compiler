@@ -26,6 +26,7 @@ static void expect(struct Parser *parser, int token_type, const char *message);
 static struct ASTNode *parse_arguments(struct Parser *parser);
 static struct ASTNode *parse_equality(struct Parser *parser);
 static struct ASTNode *parse_additive(struct Parser *parser);
+static struct ASTNode *parse_block(struct Parser *parser);
 
 // Implement the parse function
 struct ASTNode *parse(struct TokenArray *tokens, char *input) {
@@ -112,21 +113,7 @@ static struct ASTNode *parse_function_declaration(struct Parser *parser) {
   expect(parser, TOKEN_LEFT_BRACE, "Expected '{' before function body.");
 
   // Parse function body
-  struct ASTNode *body = NULL;
-  struct ASTNode **current = &body;
-
-  while (!is_at_end(parser) && !match(parser, TOKEN_RIGHT_BRACE)) {
-    struct ASTNode *stmt = parse_statement(parser);
-    if (stmt) {
-      *current = stmt;
-      current = &((*current)->next);
-    } else {
-      struct Token *current_token = peek(parser);
-      fprintf(stderr, "Error on line %d: Invalid statement in function body.\n",
-             current_token ? current_token->line : 0);
-      exit(1);
-    }
-  }
+  struct ASTNode *body = parse_block(parser);
 
   // Match '}'
   expect(parser, TOKEN_RIGHT_BRACE, "Expected '}' after function body.");
@@ -146,6 +133,33 @@ static struct ASTNode *parse_function_declaration(struct Parser *parser) {
 
 // Parse a statement
 static struct ASTNode *parse_statement(struct Parser *parser) {
+  // If statement
+  if (match(parser, TOKEN_IF)) {
+    advance(parser); // Consume 'if'
+    
+    // Expect '('
+    expect(parser, TOKEN_LEFT_PAREN, "Expected '(' after 'if'.");
+    
+    // Parse condition
+    struct ASTNode *condition = parse_expression(parser);
+    
+    // Expect ')'
+    expect(parser, TOKEN_RIGHT_PAREN, "Expected ')' after if condition.");
+    
+    // Parse body block
+    expect(parser, TOKEN_LEFT_BRACE, "Expected '{' after if condition.");
+    struct ASTNode *body = parse_block(parser);
+    expect(parser, TOKEN_RIGHT_BRACE, "Expected '}' after if body.");
+
+    // Create if statement node
+    struct ASTNode *node = malloc(sizeof(struct ASTNode));
+    node->type = NODE_IF_STATEMENT;
+    node->if_stmt.condition = condition;
+    node->if_stmt.body = body;
+    node->next = NULL;
+    return node;
+  }
+
   // Variable declaration or expression statement
   if (match(parser, TOKEN_IDENTIFIER)) {
     struct Token *first_token = peek(parser);
@@ -465,6 +479,9 @@ void free_ast(struct ASTNode *node) {
       }
     } else if (node->type == NODE_STRING_LITERAL) {
       free(node->string_literal.value);
+    } else if (node->type == NODE_IF_STATEMENT) {
+      free_ast(node->if_stmt.condition);
+      free_ast(node->if_stmt.body);
     }
 
     free(node);
@@ -484,4 +501,24 @@ static struct ASTNode *parse_arguments(struct Parser *parser) {
   }
 
   return first_arg;
+}
+
+static struct ASTNode *parse_block(struct Parser *parser) {
+    struct ASTNode *body = NULL;
+    struct ASTNode **current = &body;
+
+    while (!is_at_end(parser) && !match(parser, TOKEN_RIGHT_BRACE)) {
+        struct ASTNode *stmt = parse_statement(parser);
+        if (stmt) {
+            *current = stmt;
+            current = &((*current)->next);
+        } else {
+            struct Token *current_token = peek(parser);
+            fprintf(stderr, "Error on line %d: Invalid statement in block.\n",
+                   current_token ? current_token->line : 0);
+            exit(1);
+        }
+    }
+
+    return body;
 }
