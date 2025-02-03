@@ -19,6 +19,7 @@
 #define INSTR_SET_EQ 13
 #define INSTR_SET_NE 14
 #define INSTR_MOVZX 15
+#define INSTR_JE 16
 
 // Operand types
 #define OPERAND_REGISTER 1
@@ -539,6 +540,48 @@ struct Assembly *generate_code(struct ASTNode *ast, struct SemanticContext *cont
                     add_instruction(text, INSTR_MOV, reg_operand(REG_RSP), reg_operand(REG_RBP));
                     add_instruction(text, INSTR_POP, reg_operand(REG_RBP), reg_operand(REG_RBP));
                     add_instruction(text, INSTR_RET, reg_operand(REG_RAX), reg_operand(REG_RAX));
+                }
+                else if (body->type == NODE_IF_STATEMENT) {
+                    static int if_counter = 0;
+                    
+                    // Generate condition
+                    int cond_reg = generate_expression(text, body->if_stmt.condition, func, assembly, &ctx_stmt);
+                    
+                    // Compare condition with 0
+                    add_instruction(text, INSTR_CMP, reg_operand(cond_reg), imm_operand(0));
+                    free_register(&ctx_stmt, cond_reg);
+                    
+                    // Create labels
+                    char end_label[32];
+                    snprintf(end_label, sizeof(end_label), ".Lif_end%d", if_counter++);
+                    
+                    // Jump to end if condition is false
+                    add_instruction(text, INSTR_JE, label_operand(end_label), reg_operand(0));
+                    
+                    // Generate if body
+                    struct ASTNode *if_body = body->if_stmt.body;
+                    while (if_body) {
+                        struct CodegenContext ctx_body;
+                        init_codegen_context(&ctx_body);
+                        generate_expression(text, if_body, func, assembly, &ctx_body);
+                        if_body = if_body->next;
+                    }
+                    
+                    // Add end label
+                    struct Instruction *end_instr = malloc(sizeof(struct Instruction));
+                    end_instr->type = INSTR_LABEL;
+                    end_instr->src.type = OPERAND_LABEL;
+                    end_instr->src.label = strdup(end_label);
+                    end_instr->next = NULL;
+                    
+                    // Append to text section
+                    if (text->instructions) {
+                        struct Instruction *last = text->instructions;
+                        while (last->next) last = last->next;
+                        last->next = end_instr;
+                    } else {
+                        text->instructions = end_instr;
+                    }
                 }
                 else {
                     // For function calls, assignments, binary ops, etc.

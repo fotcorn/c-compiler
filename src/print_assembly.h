@@ -40,6 +40,7 @@ const char *instr_to_str(int type) {
     if (type == INSTR_SET_EQ) return "sete";
     if (type == INSTR_SET_NE) return "setne";
     if (type == INSTR_MOVZX) return "movzbq";
+    if (type == INSTR_JE) return "je";
     return "unknown";
 }
 
@@ -69,8 +70,12 @@ void print_operand(FILE *out, struct Operand op) {
 void print_instruction(FILE *out, struct Instruction *instr) {
     fprintf(out, "    %s ", instr_to_str(instr->type));
 
-    // Special case for SETE which has one operand
-    if (instr->type == INSTR_SET_EQ || instr->type == INSTR_SET_NE) {
+    // Handle different instruction types
+    if (instr->type == INSTR_JE) {
+        // For jumps, print label directly without (%rip)
+        fprintf(out, "%s\n", instr->dest.label);
+        return;
+    } else if (instr->type == INSTR_SET_EQ || instr->type == INSTR_SET_NE) {
         print_operand(out, instr->dest);
         fprintf(out, "\n");
         return;

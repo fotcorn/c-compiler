@@ -12,7 +12,7 @@ int main() {
     }
 
     if (a == c) {
-        printf("a == b\n");
+        printf("a == c\n");
     }
 
     // CHECK: a == a
