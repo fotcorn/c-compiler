@@ -46,6 +46,9 @@ const char *instr_to_str(int type) {
 
 // Print an operand
 void print_operand(FILE *out, struct Operand op) {
+    if (op.type == OPERAND_EMPTY) {
+        return;
+    }
     if (op.type == OPERAND_REGISTER) {
         fprintf(out, "%%%s", reg_to_str(op.reg));
     } else if (op.type == OPERAND_IMMEDIATE) {
@@ -57,12 +60,9 @@ void print_operand(FILE *out, struct Operand op) {
             fprintf(out, "(%%%s)", reg_to_str(op.mem.base_reg));
         }
     } else if (op.type == OPERAND_LABEL) {
-        // Check if it's an internal label (starts with .)
-        if (op.label[0] == '.') {
-            fprintf(out, "%s(%%rip)", op.label);
-        } else {
-            fprintf(out, "%s", op.label);
-        }
+        fprintf(out, "%s", op.label);
+    } else if (op.type == OPERAND_RIP_LABEL) {
+        fprintf(out, "%s(%%rip)", op.label);
     }
 }
 
@@ -70,48 +70,15 @@ void print_operand(FILE *out, struct Operand op) {
 void print_instruction(FILE *out, struct Instruction *instr) {
     fprintf(out, "    %s ", instr_to_str(instr->type));
 
-    // Handle different instruction types
-    if (instr->type == INSTR_JE) {
-        // For jumps, print label directly without (%rip)
-        fprintf(out, "%s\n", instr->dest.label);
-        return;
-    } else if (instr->type == INSTR_SET_EQ || instr->type == INSTR_SET_NE) {
-        print_operand(out, instr->dest);
-        fprintf(out, "\n");
-        return;
-    }
+    // Print first operand if it exists
+    print_operand(out, instr->op1);
 
-    // Special case for RET which has no operands
-    if (instr->type == INSTR_RET) {
-        fprintf(out, "\n");
-        return;
+    // Print second operand if it exists and first operand wasn't empty
+    if (instr->op2.type != OPERAND_EMPTY && instr->op1.type != OPERAND_EMPTY) {
+        fprintf(out, ", ");
+        print_operand(out, instr->op2);
     }
-
-    // Special case for POP and PUSH which have only one operand
-    if (instr->type == INSTR_POP || instr->type == INSTR_PUSH) {
-        print_operand(out, instr->src);
-        fprintf(out, "\n");
-        return;
-    }
-
-    // Special case for CALL
-    if (instr->type == INSTR_CALL) {
-        print_operand(out, instr->src);
-        fprintf(out, "\n");
-        return;
-    }
-
-    // Special case for DIV which has only one operand
-    if (instr->type == INSTR_DIV) {
-        print_operand(out, instr->dest);
-        fprintf(out, "\n");
-        return;
-    }
-
-    // For most instructions, print source first, then destination (AT&T syntax)
-    print_operand(out, instr->src);
-    fprintf(out, ", ");
-    print_operand(out, instr->dest);
+    
     fprintf(out, "\n");
 }
 
@@ -143,7 +110,7 @@ void print_assembly(FILE *out, struct Assembly *assembly) {
         struct Instruction *instr = section->instructions;
         while (instr) {
             if (instr->type == INSTR_LABEL) {
-                fprintf(out, "%s:\n", instr->src.label);
+                fprintf(out, "%s:\n", instr->op1.label);
             } else {
                 print_instruction(out, instr);
             }

@@ -94,8 +94,8 @@ void add_instruction(struct Section *section, int type,
                     struct Operand dest, struct Operand src) {
     struct Instruction *instr = malloc(sizeof(struct Instruction));
     instr->type = type;
-    instr->dest = dest;
-    instr->src = src;
+    instr->op1 = dest;
+    instr->op2 = src;
     instr->next = NULL;
 
     if (!section->instructions) {
@@ -130,6 +130,17 @@ struct Operand mem_operand(int base_reg, int offset) {
 struct Operand label_operand(const char *label) {
     struct Operand op = {.type = OPERAND_LABEL};
     op.label = strdup(label);
+    return op;
+}
+
+struct Operand rip_label_operand(const char *label) {
+    struct Operand op = {.type = OPERAND_RIP_LABEL};
+    op.label = strdup(label);
+    return op;
+}
+
+struct Operand empty_operand() {
+    struct Operand op = {.type = OPERAND_EMPTY};
     return op;
 }
 
@@ -466,8 +477,8 @@ struct Assembly *generate_code(struct ASTNode *ast, struct SemanticContext *cont
             // Add function label
             struct Instruction *label = malloc(sizeof(struct Instruction));
             label->type = INSTR_LABEL;
-            label->src.type = OPERAND_LABEL;
-            label->src.label = strdup(current->function_decl.name);
+            label->op1.type = OPERAND_LABEL;
+            label->op1.label = strdup(current->function_decl.name);
             label->next = NULL;
 
             if (!text->instructions) {
@@ -570,8 +581,8 @@ struct Assembly *generate_code(struct ASTNode *ast, struct SemanticContext *cont
                     // Add end label
                     struct Instruction *end_instr = malloc(sizeof(struct Instruction));
                     end_instr->type = INSTR_LABEL;
-                    end_instr->src.type = OPERAND_LABEL;
-                    end_instr->src.label = strdup(end_label);
+                    end_instr->op1.type = OPERAND_LABEL;
+                    end_instr->op1.label = strdup(end_label);
                     end_instr->next = NULL;
                     
                     // Append to text section

@@ -211,8 +211,8 @@ struct Operand {
 // Represents a single assembly instruction
 struct Instruction {
     int type;
-    struct Operand dest;
-    struct Operand src;
+    struct Operand op1;
+    struct Operand op2; 
     struct Instruction *next;
 };
 
@@ -237,3 +237,50 @@ struct Assembly {
     int extern_count;
     struct StringLiteral *string_literals;
 };
+
+// Instruction types
+#define INSTR_MOV 1
+#define INSTR_ADD 2
+#define INSTR_SUB 3
+#define INSTR_PUSH 4
+#define INSTR_POP 5
+#define INSTR_CALL 6
+#define INSTR_RET 7
+#define INSTR_LEA 8
+#define INSTR_MUL 9
+#define INSTR_DIV 10
+#define INSTR_LABEL 11
+#define INSTR_CMP 12
+#define INSTR_SET_EQ 13
+#define INSTR_SET_NE 14
+#define INSTR_MOVZX 15
+#define INSTR_JE 16
+
+// Operand types
+#define OPERAND_EMPTY 0       // For instructions with no operand
+#define OPERAND_REGISTER 1
+#define OPERAND_IMMEDIATE 2
+#define OPERAND_MEMORY 3
+#define OPERAND_LABEL 4
+#define OPERAND_RIP_LABEL 5   // For RIP-relative labels
+
+// All x86-64 64-bit registers
+#define REG_RAX 1
+#define REG_RBX 2
+#define REG_RCX 3
+#define REG_RDX 4
+#define REG_RSP 5
+#define REG_RBP 6
+#define REG_RDI 7
+#define REG_RSI 8
+#define REG_R8  9
+#define REG_R9  10
+#define REG_R10 11
+#define REG_R11 12
+#define REG_R12 13
+#define REG_R13 14
+#define REG_R14 15
+#define REG_R15 16
+#define REG_AL 17
+
+#define REG_COUNT 16
