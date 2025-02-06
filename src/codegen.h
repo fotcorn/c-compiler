@@ -46,11 +46,11 @@ struct Section *create_section(const char *name) {
 
 // Add an instruction to a section
 void add_instruction(struct Section *section, int type,
-                    struct Operand dest, struct Operand src) {
+                    struct Operand op1, struct Operand op2) {
     struct Instruction *instr = malloc(sizeof(struct Instruction));
     instr->type = type;
-    instr->op1 = dest;
-    instr->op2 = src;
+    instr->op1 = op1;
+    instr->op2 = op2;
     instr->next = NULL;
 
     if (!section->instructions) {
@@ -171,15 +171,15 @@ static int generate_expression(struct Section *text,
     if (!node) {
         // Just return a register holding 0 if needed
         int dummy_reg = allocate_register(ctx);
-        add_instruction(text, INSTR_MOV, reg_operand(dummy_reg), imm_operand(0));
+        add_instruction(text, INSTR_MOV, imm_operand(0), reg_operand(dummy_reg));
         return dummy_reg;
     }
 
     // Integer literal
     if (node->type == NODE_INTEGER_LITERAL) {
         int r = allocate_register(ctx);
-        add_instruction(text, INSTR_MOV, reg_operand(r),
-                        imm_operand(node->int_literal.value));
+        add_instruction(text, INSTR_MOV, imm_operand(node->int_literal.value),
+                        reg_operand(r));
         return r;
     }
 
@@ -189,8 +189,8 @@ static int generate_expression(struct Section *text,
         // If not found here, might be in global or parent scope, etc.
         if (var) {
             int r = allocate_register(ctx);
-            add_instruction(text, INSTR_MOV, reg_operand(r),
-                            mem_operand(REG_RBP, var->variable.offset));
+            add_instruction(text, INSTR_MOV, mem_operand(REG_RBP, var->variable.offset),
+                            reg_operand(r));
             return r;
         }
         // fallback error
@@ -203,7 +203,7 @@ static int generate_expression(struct Section *text,
         // Put string in data section, load it with LEA
         char *label = add_string_literal(assembly, node->string_literal.value);
         int r = allocate_register(ctx);
-        add_instruction(text, INSTR_LEA, reg_operand(r), label_operand(label));
+        add_instruction(text, INSTR_LEA, rip_label_operand(label), reg_operand(r));
         return r;
     }
 
@@ -218,7 +218,7 @@ static int generate_expression(struct Section *text,
         int i = 0;
         while (i < REG_COUNT) {
             if (ctx->used[i]) {
-                add_instruction(text, INSTR_PUSH, reg_operand(i + 1), reg_operand(i + 1));
+                add_instruction(text, INSTR_PUSH, reg_operand(i + 1), empty_operand());
                 ctx->used[i] = 0;
             }
             i++;
@@ -231,7 +231,7 @@ static int generate_expression(struct Section *text,
         while (arg && arg_count < 6) {
             int r = generate_expression(text, arg, func, assembly, ctx);
             if (reg_args[arg_count] != r) {
-                add_instruction(text, INSTR_MOV, reg_operand(reg_args[arg_count]), reg_operand(r));
+                add_instruction(text, INSTR_MOV, reg_operand(r), reg_operand(reg_args[arg_count]));
             }
             // Free the temporary holding this argument.
             free_register(ctx, r);
@@ -243,17 +243,16 @@ static int generate_expression(struct Section *text,
             arg_count++;
         }
         // Clear AL for variadic calls
-        add_instruction(text, INSTR_MOV, reg_operand(REG_RAX), imm_operand(0));
+        add_instruction(text, INSTR_MOV, imm_operand(0), reg_operand(REG_RAX));
 
         // Call the function
-        add_instruction(text, INSTR_CALL, label_operand(node->func_call.name),
-                        label_operand(node->func_call.name));
+        add_instruction(text, INSTR_CALL, label_operand(node->func_call.name), empty_operand());
 
         // Pop and restore the usage state for all registers we saved.
         i = REG_COUNT - 1;
         while (i >= 0) {
             if (saved_used[i]) {
-                add_instruction(text, INSTR_POP, reg_operand(i + 1), reg_operand(i + 1));
+                add_instruction(text, INSTR_POP, reg_operand(i + 1), empty_operand());
             }
             // Restore usage state exactly as it was before.
             ctx->used[i] = saved_used[i];
@@ -262,7 +261,7 @@ static int generate_expression(struct Section *text,
 
         // The returned value is in RAX. We want it in a fresh temporary register.
         int result_reg = allocate_register(ctx);
-        add_instruction(text, INSTR_MOV, reg_operand(result_reg), reg_operand(REG_RAX));
+        add_instruction(text, INSTR_MOV, reg_operand(REG_RAX), reg_operand(result_reg));
 
         return result_reg;
     }
@@ -277,13 +276,13 @@ static int generate_expression(struct Section *text,
         // Perform the operation
         if (strcmp(node->binary_op.operator, "+") == 0) {
             add_instruction(text, INSTR_ADD,
-                            reg_operand(left_reg), reg_operand(right_reg));
+                            reg_operand(right_reg), reg_operand(left_reg));
         } else if (strcmp(node->binary_op.operator, "-") == 0) {
             add_instruction(text, INSTR_SUB,
-                            reg_operand(left_reg), reg_operand(right_reg));
+                            reg_operand(right_reg), reg_operand(left_reg));
         } else if (strcmp(node->binary_op.operator, "*") == 0) {
             add_instruction(text, INSTR_MUL,
-                            reg_operand(left_reg), reg_operand(right_reg));
+                            reg_operand(right_reg), reg_operand(left_reg));
         } else if (strcmp(node->binary_op.operator, "/") == 0) {
             // 1. If RDX is used for some *other* expression (not left or right),
             //    then we need to move that occupant out of RDX so we can safely zero RDX.
@@ -293,7 +292,7 @@ static int generate_expression(struct Section *text,
                 if (left_reg != REG_RDX && right_reg != REG_RDX) {
                     // Some other temp is in RDX, so we must move it out.
                     int spare = allocate_register(ctx);
-                    add_instruction(text, INSTR_MOV, reg_operand(spare), reg_operand(REG_RDX));
+                    add_instruction(text, INSTR_MOV, reg_operand(REG_RDX), reg_operand(spare));
                     // Now we have that occupant in 'spare', so we can free RDX.
                     free_register(ctx, REG_RDX);
                 }
@@ -302,7 +301,7 @@ static int generate_expression(struct Section *text,
             // 2. If the left operand is in RDX, we can move it straight to RAX.
             //    That way, we're not losing its value when we zero RDX.
             if (left_reg == REG_RDX) {
-                add_instruction(text, INSTR_MOV, reg_operand(REG_RAX), reg_operand(REG_RDX));
+                add_instruction(text, INSTR_MOV, reg_operand(REG_RDX), reg_operand(REG_RAX));
                 free_register(ctx, REG_RDX);
                 left_reg = REG_RAX;
             }
@@ -311,7 +310,7 @@ static int generate_expression(struct Section *text,
             //    so as not to lose it when we zero RDX.
             if (right_reg == REG_RDX) {
                 int tmp = allocate_register(ctx);
-                add_instruction(text, INSTR_MOV, reg_operand(tmp), reg_operand(REG_RDX));
+                add_instruction(text, INSTR_MOV, reg_operand(REG_RDX), reg_operand(tmp));
                 free_register(ctx, REG_RDX);
                 right_reg = tmp;
             }
@@ -319,7 +318,7 @@ static int generate_expression(struct Section *text,
             // 4. Move 'left' into RAX if it's not already there.
             //    Then we can free left_reg from the context.
             if (left_reg != REG_RAX) {
-                add_instruction(text, INSTR_MOV, reg_operand(REG_RAX), reg_operand(left_reg));
+                add_instruction(text, INSTR_MOV, reg_operand(left_reg), reg_operand(REG_RAX));
                 free_register(ctx, left_reg);
             } else {
                 // If left_reg == RAX, we just free it in the context
@@ -327,43 +326,42 @@ static int generate_expression(struct Section *text,
             }
 
             // 5. Zero out RDX before idiv (RDX:RAX is the dividend).
-            add_instruction(text, INSTR_MOV, reg_operand(REG_RDX), imm_operand(0));
+            add_instruction(text, INSTR_MOV, imm_operand(0), reg_operand(REG_RDX));
 
             // 6. Perform IDIV by the right operand → result appears in RAX.
-            struct Operand no_op = {0};
-            add_instruction(text, INSTR_DIV, reg_operand(right_reg), no_op);
+            add_instruction(text, INSTR_DIV, reg_operand(right_reg), empty_operand());
 
             // 7. We no longer need the right_reg operand.
             free_register(ctx, right_reg);
 
             // 8. The final result is in RAX. Allocate a fresh scratch reg to hold it.
             int div_res = allocate_register(ctx);
-            add_instruction(text, INSTR_MOV, reg_operand(div_res), reg_operand(REG_RAX));
+            add_instruction(text, INSTR_MOV, reg_operand(REG_RAX), reg_operand(div_res));
             return div_res;
         } else if (strcmp(node->binary_op.operator, "==") == 0) {
             // Compare left and right values
-            add_instruction(text, INSTR_CMP, reg_operand(left_reg), reg_operand(right_reg));
+            add_instruction(text, INSTR_CMP, reg_operand(right_reg), reg_operand(left_reg));
 
             // Set AL to 1 if equal, 0 otherwise
-            add_instruction(text, INSTR_SET_EQ, reg_operand(REG_AL), reg_operand(REG_AL));
+            add_instruction(text, INSTR_SET_EQ, reg_operand(REG_AL), empty_operand());
 
             // Move zero-extended byte to result register
             int result_reg = allocate_register(ctx);
-            add_instruction(text, INSTR_MOVZX, reg_operand(result_reg), reg_operand(REG_AL));
+            add_instruction(text, INSTR_MOVZX, reg_operand(REG_AL), reg_operand(result_reg));
 
             free_register(ctx, left_reg);
             free_register(ctx, right_reg);
             return result_reg;
         } else if (strcmp(node->binary_op.operator, "!=") == 0) {
             // Compare left and right values
-            add_instruction(text, INSTR_CMP, reg_operand(left_reg), reg_operand(right_reg));
+            add_instruction(text, INSTR_CMP, reg_operand(right_reg), reg_operand(left_reg));
 
             // Set AL to 1 if not equal, 0 otherwise
-            add_instruction(text, INSTR_SET_NE, reg_operand(REG_AL), reg_operand(REG_AL));
+            add_instruction(text, INSTR_SET_NE, reg_operand(REG_AL), empty_operand());
 
             // Move zero-extended byte to result register
             int result_reg = allocate_register(ctx);
-            add_instruction(text, INSTR_MOVZX, reg_operand(result_reg), reg_operand(REG_AL));
+            add_instruction(text, INSTR_MOVZX, reg_operand(REG_AL), reg_operand(result_reg));
 
             free_register(ctx, left_reg);
             free_register(ctx, right_reg);
@@ -392,15 +390,15 @@ static int generate_expression(struct Section *text,
             }
             // store it
             add_instruction(text, INSTR_MOV,
-                            mem_operand(REG_RBP, var->variable.offset),
-                            reg_operand(value_reg));
+                            reg_operand(value_reg),
+                            mem_operand(REG_RBP, var->variable.offset));
         }
         free_register(ctx, value_reg);
 
         // No special "result" register for an assignment, but
         // return a register with the assigned value if you prefer:
         int dummy_reg = allocate_register(ctx);
-        add_instruction(text, INSTR_MOV, reg_operand(dummy_reg), imm_operand(0));
+        add_instruction(text, INSTR_MOV, imm_operand(0), reg_operand(dummy_reg));
         return dummy_reg;
     }
 
@@ -447,13 +445,13 @@ struct Assembly *generate_code(struct ASTNode *ast, struct SemanticContext *cont
             }
 
             // Function prologue
-            add_instruction(text, INSTR_PUSH, reg_operand(REG_RBP), reg_operand(REG_RBP));
-            add_instruction(text, INSTR_MOV, reg_operand(REG_RBP), reg_operand(REG_RSP));
+            add_instruction(text, INSTR_PUSH, reg_operand(REG_RBP), empty_operand());
+            add_instruction(text, INSTR_MOV, reg_operand(REG_RSP), reg_operand(REG_RBP));
 
             // Reserve stack space for all variables
             if (func->function.stack_size > 0) {
-                add_instruction(text, INSTR_SUB, reg_operand(REG_RSP),
-                              imm_operand(func->function.stack_size));
+                add_instruction(text, INSTR_SUB, imm_operand(func->function.stack_size),
+                              reg_operand(REG_RSP));
             }
 
             // Save parameters to their stack locations
@@ -463,8 +461,8 @@ struct Assembly *generate_code(struct ASTNode *ast, struct SemanticContext *cont
                 if (param) {
                     int reg_args[] = {REG_RDI, REG_RSI, REG_RDX, REG_RCX, REG_R8, REG_R9};
                     add_instruction(text, INSTR_MOV,
-                                  mem_operand(REG_RBP, param->variable.offset),
-                                  reg_operand(reg_args[i]));
+                                  reg_operand(reg_args[i]),
+                                  mem_operand(REG_RBP, param->variable.offset));
                 }
             }
 
@@ -487,8 +485,8 @@ struct Assembly *generate_code(struct ASTNode *ast, struct SemanticContext *cont
                         struct Symbol *var = lookup_symbol(func->function.locals,
                                                            body->var_decl.name);
                         add_instruction(text, INSTR_MOV,
-                                        mem_operand(REG_RBP, var->variable.offset),
-                                        reg_operand(reg));
+                                        reg_operand(reg),
+                                        mem_operand(REG_RBP, var->variable.offset));
                         free_register(&ctx_stmt, reg);
                     }
                 }
@@ -497,15 +495,15 @@ struct Assembly *generate_code(struct ASTNode *ast, struct SemanticContext *cont
                     int reg = generate_expression(text, body->return_stmt.value,
                                                   func, assembly, &ctx_stmt);
                     // Move that register into RAX
-                    add_instruction(text, INSTR_MOV, reg_operand(REG_RAX),
-                                    reg_operand(reg));
+                    add_instruction(text, INSTR_MOV, reg_operand(reg), 
+                                    reg_operand(REG_RAX));
                     free_register(&ctx_stmt, reg);
                     has_return = 1;
 
                     // Function epilogue and return
-                    add_instruction(text, INSTR_MOV, reg_operand(REG_RSP), reg_operand(REG_RBP));
-                    add_instruction(text, INSTR_POP, reg_operand(REG_RBP), reg_operand(REG_RBP));
-                    add_instruction(text, INSTR_RET, reg_operand(REG_RAX), reg_operand(REG_RAX));
+                    add_instruction(text, INSTR_MOV, reg_operand(REG_RBP), reg_operand(REG_RSP));
+                    add_instruction(text, INSTR_POP, reg_operand(REG_RBP), empty_operand());
+                    add_instruction(text, INSTR_RET, empty_operand(), empty_operand());
                 }
                 else if (body->type == NODE_IF_STATEMENT) {
                     static int if_counter = 0;
@@ -514,7 +512,7 @@ struct Assembly *generate_code(struct ASTNode *ast, struct SemanticContext *cont
                     int cond_reg = generate_expression(text, body->if_stmt.condition, func, assembly, &ctx_stmt);
                     
                     // Compare condition with 0
-                    add_instruction(text, INSTR_CMP, reg_operand(cond_reg), imm_operand(0));
+                    add_instruction(text, INSTR_CMP, imm_operand(0), reg_operand(cond_reg));
                     free_register(&ctx_stmt, cond_reg);
                     
                     // Create labels
@@ -522,7 +520,7 @@ struct Assembly *generate_code(struct ASTNode *ast, struct SemanticContext *cont
                     snprintf(end_label, sizeof(end_label), ".Lif_end%d", if_counter++);
                     
                     // Jump to end if condition is false
-                    add_instruction(text, INSTR_JE, label_operand(end_label), reg_operand(0));
+                    add_instruction(text, INSTR_JE, label_operand(end_label), empty_operand());
                     
                     // Generate if body
                     struct ASTNode *if_body = body->if_stmt.body;
@@ -561,8 +559,8 @@ struct Assembly *generate_code(struct ASTNode *ast, struct SemanticContext *cont
 
             if (!has_return) {
                 add_instruction(text, INSTR_MOV, reg_operand(REG_RSP), reg_operand(REG_RBP));
-                add_instruction(text, INSTR_POP, reg_operand(REG_RBP), reg_operand(REG_RBP));
-                add_instruction(text, INSTR_RET, reg_operand(REG_RAX), reg_operand(REG_RAX));
+                add_instruction(text, INSTR_POP, reg_operand(REG_RBP), empty_operand());
+                add_instruction(text, INSTR_RET, empty_operand(), empty_operand());
             }
         }
         current = current->next;
