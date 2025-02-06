@@ -20,5 +20,26 @@ int main() {
         printf("a == a\n");
     }
 
+    // CHECK: a == b
+    if (a == b) {
+        printf("a == b\n");
+    } else {
+        printf("a != b\n");
+    }
+
+    // CHECK: a != c
+    if (a == c) {
+        printf("a == c\n");
+    } else {
+        printf("a != c\n");
+    }
+
+    // CHECK: a == a
+    if (a == a) {
+        printf("a == a\n");
+    } else {
+        printf("a != a\n");
+    }
+
     return 0;
 }

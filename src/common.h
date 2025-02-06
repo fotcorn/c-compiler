@@ -133,6 +133,7 @@ struct ASTNode {
     struct {
       struct ASTNode *condition;
       struct ASTNode *body;
+      struct ASTNode *else_body;
     } if_stmt;
   };
   struct ASTNode *next; // For linked list of statements
@@ -255,6 +256,7 @@ struct Assembly {
 #define INSTR_SET_NE 14
 #define INSTR_MOVZX 15
 #define INSTR_JE 16
+#define INSTR_JMP 17
 
 // Operand types
 #define OPERAND_EMPTY 0       // For instructions with no operand

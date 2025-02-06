@@ -151,11 +151,21 @@ static struct ASTNode *parse_statement(struct Parser *parser) {
     struct ASTNode *body = parse_block(parser);
     expect(parser, TOKEN_RIGHT_BRACE, "Expected '}' after if body.");
 
+    // Parse else block
+    struct ASTNode *else_body = NULL;
+    if (match(parser, TOKEN_ELSE)) {
+      advance(parser); // Consume 'else'
+      expect(parser, TOKEN_LEFT_BRACE, "Expected '{' after else.");
+      else_body = parse_block(parser);
+      expect(parser, TOKEN_RIGHT_BRACE, "Expected '}' after else body.");
+    }
+
     // Create if statement node
     struct ASTNode *node = malloc(sizeof(struct ASTNode));
     node->type = NODE_IF_STATEMENT;
     node->if_stmt.condition = condition;
     node->if_stmt.body = body;
+    node->if_stmt.else_body = else_body;
     node->next = NULL;
     return node;
   }
@@ -482,6 +492,9 @@ void free_ast(struct ASTNode *node) {
     } else if (node->type == NODE_IF_STATEMENT) {
       free_ast(node->if_stmt.condition);
       free_ast(node->if_stmt.body);
+      if (node->if_stmt.else_body) {
+        free_ast(node->if_stmt.else_body);
+      }
     }
 
     free(node);

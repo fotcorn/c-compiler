@@ -41,6 +41,7 @@ const char *instr_to_str(int type) {
     if (type == INSTR_SET_NE) return "setne";
     if (type == INSTR_MOVZX) return "movzbq";
     if (type == INSTR_JE) return "je";
+    if (type == INSTR_JMP) return "jmp";
     return "unknown";
 }
 

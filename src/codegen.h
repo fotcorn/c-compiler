@@ -516,11 +516,13 @@ struct Assembly *generate_code(struct ASTNode *ast, struct SemanticContext *cont
                     free_register(&ctx_stmt, cond_reg);
                     
                     // Create labels
+                    char else_label[32];
                     char end_label[32];
+                    snprintf(else_label, sizeof(else_label), ".Lelse%d", if_counter);
                     snprintf(end_label, sizeof(end_label), ".Lif_end%d", if_counter++);
                     
-                    // Jump to end if condition is false
-                    add_instruction(text, INSTR_JE, label_operand(end_label), empty_operand());
+                    // Jump to else if condition is false
+                    add_instruction(text, INSTR_JE, label_operand(else_label), empty_operand());
                     
                     // Generate if body
                     struct ASTNode *if_body = body->if_stmt.body;
@@ -529,6 +531,34 @@ struct Assembly *generate_code(struct ASTNode *ast, struct SemanticContext *cont
                         init_codegen_context(&ctx_body);
                         generate_expression(text, if_body, func, assembly, &ctx_body);
                         if_body = if_body->next;
+                    }
+
+                    // Jump to end after if block
+                    add_instruction(text, INSTR_JMP, label_operand(end_label), empty_operand());
+                    
+                    // Add else label
+                    struct Instruction *else_instr = malloc(sizeof(struct Instruction));
+                    else_instr->type = INSTR_LABEL;
+                    else_instr->op1.type = OPERAND_LABEL;
+                    else_instr->op1.label = strdup(else_label);
+                    else_instr->next = NULL;
+
+                    // Append to text section
+                    if (text->instructions) {
+                        struct Instruction *last = text->instructions;
+                        while (last->next) last = last->next;
+                        last->next = else_instr;
+                    } else {
+                        text->instructions = else_instr;
+                    }
+
+                    // Generate else body
+                    struct ASTNode *else_body = body->if_stmt.else_body;
+                    while (else_body) {
+                        struct CodegenContext ctx_body;
+                        init_codegen_context(&ctx_body);
+                        generate_expression(text, else_body, func, assembly, &ctx_body);
+                        else_body = else_body->next;
                     }
                     
                     // Add end label

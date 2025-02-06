@@ -50,6 +50,11 @@ void print_ast(struct ASTNode *node, int indent) {
             print_indent(indent + 1);
             printf("Body:\n");
             print_ast(node->if_stmt.body, indent + 2);
+            if (node->if_stmt.else_body) {
+                print_indent(indent + 1);
+                printf("Else Body:\n");
+                print_ast(node->if_stmt.else_body, indent + 2);
+            }
         } else {
             printf("Unknown node type\n");
         }
