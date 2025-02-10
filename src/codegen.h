@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <assert.h>
 
 // All used temp regs are caller saved, which avoid needing to handle
 // push/pop at the function level for callee saved registers.
@@ -168,12 +169,7 @@ static int generate_expression(struct Section *text,
                                struct Assembly *assembly,
                                struct CodegenContext *ctx)
 {
-    if (!node) {
-        // Just return a register holding 0 if needed
-        int dummy_reg = allocate_register(ctx);
-        add_instruction(text, INSTR_MOV, imm_operand(0), reg_operand(dummy_reg));
-        return dummy_reg;
-    }
+    assert(node && "generate_expression: node cannot be null");
 
     // Integer literal
     if (node->type == NODE_INTEGER_LITERAL) {
@@ -395,11 +391,7 @@ static int generate_expression(struct Section *text,
         }
         free_register(ctx, value_reg);
 
-        // No special "result" register for an assignment, but
-        // return a register with the assigned value if you prefer:
-        int dummy_reg = allocate_register(ctx);
-        add_instruction(text, INSTR_MOV, imm_operand(0), reg_operand(dummy_reg));
-        return dummy_reg;
+        return -1;
     }
 
     fprintf(stderr, "generate_expression: unhandled node type %d\n", node->type);
