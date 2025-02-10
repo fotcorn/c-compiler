@@ -398,6 +398,103 @@ static int generate_expression(struct Section *text,
     exit(1);
 }
 
+
+// Returns 1 if the block contains a return statement that terminates the block.
+static int generate_block(struct Section *text, struct ASTNode *block, struct Symbol *func, struct Assembly *assembly) {
+    int has_return = 0;
+    while (block) {
+        struct CodegenContext ctx_stmt;
+        init_codegen_context(&ctx_stmt);
+        switch (block->type) {
+            case NODE_VARIABLE_DECLARATION:
+                if (block->var_decl.value) {
+                    int reg = generate_expression(text, block->var_decl.value, func, assembly, &ctx_stmt);
+                    struct Symbol *var = lookup_symbol(func->function.locals, block->var_decl.name);
+                    add_instruction(text, INSTR_MOV, reg_operand(reg), mem_operand(REG_RBP, var->variable.offset));
+                    free_register(&ctx_stmt, reg);
+                }
+                break;
+
+            case NODE_RETURN_STATEMENT: {
+                int reg = generate_expression(text, block->return_stmt.value, func, assembly, &ctx_stmt);
+                add_instruction(text, INSTR_MOV, reg_operand(reg), reg_operand(REG_RAX));
+                free_register(&ctx_stmt, reg);
+                // Function epilogue and return
+                add_instruction(text, INSTR_MOV, reg_operand(REG_RBP), reg_operand(REG_RSP));
+                add_instruction(text, INSTR_POP, reg_operand(REG_RBP), empty_operand());
+                add_instruction(text, INSTR_RET, empty_operand(), empty_operand());
+                has_return = 1;
+                // A return terminates further code generation for this block.
+                return has_return;
+            }
+
+            case NODE_IF_STATEMENT: {
+                static int if_counter = 0;
+                int cond_reg = generate_expression(text, block->if_stmt.condition, func, assembly, &ctx_stmt);
+                add_instruction(text, INSTR_CMP, imm_operand(0), reg_operand(cond_reg));
+                free_register(&ctx_stmt, cond_reg);
+
+                char else_label[32];
+                char end_label[32];
+                snprintf(else_label, sizeof(else_label), ".Lelse%d", if_counter);
+                snprintf(end_label, sizeof(end_label), ".Lif_end%d", if_counter);
+                if_counter++;
+
+                // Jump to else branch if condition is false.
+                add_instruction(text, INSTR_JE, label_operand(else_label), empty_operand());
+
+                // Generate the "if" (then) block.
+                int then_return = generate_block(text, block->if_stmt.body, func, assembly);
+                // Jump to end after then block.
+                add_instruction(text, INSTR_JMP, label_operand(end_label), empty_operand());
+
+                // Append the else label.
+                struct Instruction *else_instr = malloc(sizeof(struct Instruction));
+                else_instr->type = INSTR_LABEL;
+                else_instr->op1.type = OPERAND_LABEL;
+                else_instr->op1.label = strdup(else_label);
+                else_instr->next = NULL;
+                if (text->instructions) {
+                    struct Instruction *last = text->instructions;
+                    while (last->next) last = last->next;
+                    last->next = else_instr;
+                } else {
+                    text->instructions = else_instr;
+                }
+
+                // Generate the "else" block.
+                int else_return = generate_block(text, block->if_stmt.else_body, func, assembly);
+
+                // Append the end label.
+                struct Instruction *end_instr = malloc(sizeof(struct Instruction));
+                end_instr->type = INSTR_LABEL;
+                end_instr->op1.type = OPERAND_LABEL;
+                end_instr->op1.label = strdup(end_label);
+                end_instr->next = NULL;
+                if (text->instructions) {
+                    struct Instruction *last = text->instructions;
+                    while (last->next) last = last->next;
+                    last->next = end_instr;
+                } else {
+                    text->instructions = end_instr;
+                }
+
+                // If both branches guarantee a return, then mark this block as returning.
+                if (then_return && else_return) {
+                    has_return = 1;
+                }
+                break;
+            }
+
+            default:
+                // For expressions (assignments, function calls, binary ops, etc.)
+                generate_expression(text, block, func, assembly, &ctx_stmt);
+        }
+        block = block->next;
+    }
+    return has_return;
+}
+
 // ------------------- Function that generates code for the entire AST -------------------
 
 // We show only the parts of generate_code function or function body code that remove
@@ -458,127 +555,9 @@ struct Assembly *generate_code(struct ASTNode *ast, struct SemanticContext *cont
                 }
             }
 
-            // We'll have a codegen context for each function,
-            // re-initialized per statement. Named variables remain on stack after each statement.
-            struct CodegenContext ctx_stmt;  // local
-            struct ASTNode *body = current->function_decl.body;
-            int has_return = 0;
-
-            while (body) {
-                // Re-init context each statement
-                init_codegen_context(&ctx_stmt);
-
-                if (body->type == NODE_VARIABLE_DECLARATION) {
-                    // If there's an initializer, we use generate_expression:
-                    if (body->var_decl.value) {
-                        int reg = generate_expression(text, body->var_decl.value,
-                                                      func, assembly, &ctx_stmt);
-                        // store to stack
-                        struct Symbol *var = lookup_symbol(func->function.locals,
-                                                           body->var_decl.name);
-                        add_instruction(text, INSTR_MOV,
-                                        reg_operand(reg),
-                                        mem_operand(REG_RBP, var->variable.offset));
-                        free_register(&ctx_stmt, reg);
-                    }
-                }
-                else if (body->type == NODE_RETURN_STATEMENT) {
-                    // Generate the expression into a register
-                    int reg = generate_expression(text, body->return_stmt.value,
-                                                  func, assembly, &ctx_stmt);
-                    // Move that register into RAX
-                    add_instruction(text, INSTR_MOV, reg_operand(reg), 
-                                    reg_operand(REG_RAX));
-                    free_register(&ctx_stmt, reg);
-                    has_return = 1;
-
-                    // Function epilogue and return
-                    add_instruction(text, INSTR_MOV, reg_operand(REG_RBP), reg_operand(REG_RSP));
-                    add_instruction(text, INSTR_POP, reg_operand(REG_RBP), empty_operand());
-                    add_instruction(text, INSTR_RET, empty_operand(), empty_operand());
-                }
-                else if (body->type == NODE_IF_STATEMENT) {
-                    static int if_counter = 0;
-                    
-                    // Generate condition
-                    int cond_reg = generate_expression(text, body->if_stmt.condition, func, assembly, &ctx_stmt);
-                    
-                    // Compare condition with 0
-                    add_instruction(text, INSTR_CMP, imm_operand(0), reg_operand(cond_reg));
-                    free_register(&ctx_stmt, cond_reg);
-                    
-                    // Create labels
-                    char else_label[32];
-                    char end_label[32];
-                    snprintf(else_label, sizeof(else_label), ".Lelse%d", if_counter);
-                    snprintf(end_label, sizeof(end_label), ".Lif_end%d", if_counter++);
-                    
-                    // Jump to else if condition is false
-                    add_instruction(text, INSTR_JE, label_operand(else_label), empty_operand());
-                    
-                    // Generate if body
-                    struct ASTNode *if_body = body->if_stmt.body;
-                    while (if_body) {
-                        struct CodegenContext ctx_body;
-                        init_codegen_context(&ctx_body);
-                        generate_expression(text, if_body, func, assembly, &ctx_body);
-                        if_body = if_body->next;
-                    }
-
-                    // Jump to end after if block
-                    add_instruction(text, INSTR_JMP, label_operand(end_label), empty_operand());
-                    
-                    // Add else label
-                    struct Instruction *else_instr = malloc(sizeof(struct Instruction));
-                    else_instr->type = INSTR_LABEL;
-                    else_instr->op1.type = OPERAND_LABEL;
-                    else_instr->op1.label = strdup(else_label);
-                    else_instr->next = NULL;
-
-                    // Append to text section
-                    if (text->instructions) {
-                        struct Instruction *last = text->instructions;
-                        while (last->next) last = last->next;
-                        last->next = else_instr;
-                    } else {
-                        text->instructions = else_instr;
-                    }
-
-                    // Generate else body
-                    struct ASTNode *else_body = body->if_stmt.else_body;
-                    while (else_body) {
-                        struct CodegenContext ctx_body;
-                        init_codegen_context(&ctx_body);
-                        generate_expression(text, else_body, func, assembly, &ctx_body);
-                        else_body = else_body->next;
-                    }
-                    
-                    // Add end label
-                    struct Instruction *end_instr = malloc(sizeof(struct Instruction));
-                    end_instr->type = INSTR_LABEL;
-                    end_instr->op1.type = OPERAND_LABEL;
-                    end_instr->op1.label = strdup(end_label);
-                    end_instr->next = NULL;
-                    
-                    // Append to text section
-                    if (text->instructions) {
-                        struct Instruction *last = text->instructions;
-                        while (last->next) last = last->next;
-                        last->next = end_instr;
-                    } else {
-                        text->instructions = end_instr;
-                    }
-                }
-                else {
-                    // For function calls, assignments, binary ops, etc.
-                    // we just call generate_expression and discard if needed
-                    generate_expression(text, body, func, assembly, &ctx_stmt);
-                }
-
-                // Next statement
-                body = body->next;
-            }
-
+            // Generate code for the function body using generic block code generation.
+            // The block generator returns a flag indicating if a return was encountered.
+            int has_return = generate_block(text, current->function_decl.body, func, assembly);
             if (!has_return) {
                 add_instruction(text, INSTR_MOV, reg_operand(REG_RSP), reg_operand(REG_RBP));
                 add_instruction(text, INSTR_POP, reg_operand(REG_RBP), empty_operand());

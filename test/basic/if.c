@@ -41,5 +41,15 @@ int main() {
         printf("a != a\n");
     }
 
+    if (a == b) {
+        if (b == c) {
+            printf("a == b and b == c\n");
+        } else {
+            printf("a == b and b != c\n");
+        }
+    } else {
+        printf("a != b\n");
+    }
+
     return 0;
 }
