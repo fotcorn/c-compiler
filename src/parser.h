@@ -151,13 +151,19 @@ static struct ASTNode *parse_statement(struct Parser *parser) {
     struct ASTNode *body = parse_block(parser);
     expect(parser, TOKEN_RIGHT_BRACE, "Expected '}' after if body.");
 
-    // Parse else block
+    // Parse else block with support for "else if"
     struct ASTNode *else_body = NULL;
     if (match(parser, TOKEN_ELSE)) {
       advance(parser); // Consume 'else'
-      expect(parser, TOKEN_LEFT_BRACE, "Expected '{' after else.");
-      else_body = parse_block(parser);
-      expect(parser, TOKEN_RIGHT_BRACE, "Expected '}' after else body.");
+      if (match(parser, TOKEN_IF)) {
+         // "else if" chain: recursively parse the if-statement
+         else_body = parse_statement(parser);
+      } else {
+         // Regular else block: expect a block in braces
+         expect(parser, TOKEN_LEFT_BRACE, "Expected '{' after else.");
+         else_body = parse_block(parser);
+         expect(parser, TOKEN_RIGHT_BRACE, "Expected '}' after else body.");
+      }
     }
 
     // Create if statement node

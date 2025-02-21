@@ -41,6 +41,7 @@ int main() {
         printf("a != a\n");
     }
 
+    // CHECK: a == b and b != c
     if (a == b) {
         if (b == c) {
             printf("a == b and b == c\n");
@@ -49,6 +50,33 @@ int main() {
         }
     } else {
         printf("a != b\n");
+    }
+
+    // CHECK: a == b
+    if (a == b) {
+        printf("a == b\n");
+    } else if (b == c) {
+        printf("b == c\n");
+    } else {
+        printf("a == b and b != c\n");
+    }
+
+    // CHECK: a == b
+    if (b == c) {
+        printf("b == c\n");
+    } else if (a == b) {
+        printf("a == b\n");
+    } else {
+        printf("a == b and b != c\n");
+    }
+
+    // CHECK: a != c and b != c
+    if (a == c) {
+        printf("a == c\n");
+    } else if (b == c) {
+        printf("b == c\n");
+    } else {
+        printf("a != c and b != c\n");
     }
 
     return 0;
