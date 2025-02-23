@@ -156,47 +156,48 @@ struct SymbolTable;
 
 // Symbol information
 struct Symbol {
-    char *name;
-    int type;
-    union {
-        struct {
-            char *data_type;
-            int offset;      // Stack offset from RBP
-            int size;       // Size in bytes
-        } variable;
+  char *name;
+  int type;
+  union {
+    struct {
+      char *data_type;
+      int offset; // Stack offset from RBP
+      int size;   // Size in bytes
+    } variable;
 
-        struct {
-            char *return_type;
-            int param_count;
-            char **param_types;
-            int stack_size;  // Total stack frame size
-            struct SymbolTable *locals;  // Local variables
-        } function;
+    struct {
+      char *return_type;
+      int param_count;
+      char **param_types;
+      int stack_size;             // Total stack frame size
+      struct SymbolTable *locals; // Local variables
+    } function;
 
-        struct {
-            int total_size;  // Total struct size
-            int field_count;
-            struct Symbol **fields;  // Array of field symbols
-        } struct_info;
-    };
-    struct SymbolTable *scope;  // Points to nested scope if this symbol creates one
+    struct {
+      int total_size; // Total struct size
+      int field_count;
+      struct Symbol **fields; // Array of field symbols
+    } struct_info;
+  };
+  struct SymbolTable
+      *scope; // Points to nested scope if this symbol creates one
 };
 
 // Symbol table for tracking scopes
 struct SymbolTable {
-    struct Symbol **symbols;
-    int count;
-    int capacity;
-    struct SymbolTable *parent;  // Parent scope
+  struct Symbol **symbols;
+  int count;
+  int capacity;
+  struct SymbolTable *parent; // Parent scope
 };
 
 // Semantic analysis context
 struct SemanticContext {
-    struct SymbolTable *current_scope;
-    struct SymbolTable *global_scope;  // Keep track of global scope
-    char *current_function;  // Name of function being analyzed
-    int had_error;
-    int current_stack_offset;  // Track current stack offset for variables
+  struct SymbolTable *current_scope;
+  struct SymbolTable *global_scope; // Keep track of global scope
+  char *current_function;           // Name of function being analyzed
+  int had_error;
+  int current_stack_offset; // Track current stack offset for variables
 };
 
 // Symbol table functions
@@ -204,46 +205,46 @@ struct Symbol *lookup_symbol(struct SymbolTable *scope, const char *name);
 
 // Represents an operand in an assembly instruction
 struct Operand {
-    int type;
-    union {
-        int reg;            // For register operands
-        int immediate;      // For immediate values
-        struct {
-            int base_reg;   // Base register for memory operands
-            int offset;     // Offset for memory operands
-        } mem;
-        char *label;        // For labels and function names
-    };
+  int type;
+  union {
+    int reg;       // For register operands
+    int immediate; // For immediate values
+    struct {
+      int base_reg; // Base register for memory operands
+      int offset;   // Offset for memory operands
+    } mem;
+    char *label; // For labels and function names
+  };
 };
 
 // Represents a single assembly instruction
 struct Instruction {
-    int type;
-    struct Operand op1;
-    struct Operand op2; 
-    struct Instruction *next;
+  int type;
+  struct Operand op1;
+  struct Operand op2;
+  struct Instruction *next;
 };
 
 // Represents a section of assembly code
 struct Section {
-    char *name;
-    struct Instruction *instructions;
-    struct Section *next;
+  char *name;
+  struct Instruction *instructions;
+  struct Section *next;
 };
 
 // String literals for the data section
 struct StringLiteral {
-    char *label;
-    char *value;
-    struct StringLiteral *next;
+  char *label;
+  char *value;
+  struct StringLiteral *next;
 };
 
 // Represents the complete assembly program
 struct Assembly {
-    struct Section *sections;
-    char **extern_symbols;  // Array of external symbols (e.g., printf)
-    int extern_count;
-    struct StringLiteral *string_literals;
+  struct Section *sections;
+  char **extern_symbols; // Array of external symbols (e.g., printf)
+  int extern_count;
+  struct StringLiteral *string_literals;
 };
 
 // Instruction types
@@ -266,12 +267,12 @@ struct Assembly {
 #define INSTR_JMP 17
 
 // Operand types
-#define OPERAND_EMPTY 0       // For instructions with no operand
+#define OPERAND_EMPTY 0 // For instructions with no operand
 #define OPERAND_REGISTER 1
 #define OPERAND_IMMEDIATE 2
 #define OPERAND_MEMORY 3
 #define OPERAND_LABEL 4
-#define OPERAND_RIP_LABEL 5   // For RIP-relative labels
+#define OPERAND_RIP_LABEL 5 // For RIP-relative labels
 
 // All x86-64 64-bit registers
 #define REG_RAX 1
@@ -282,8 +283,8 @@ struct Assembly {
 #define REG_RBP 6
 #define REG_RDI 7
 #define REG_RSI 8
-#define REG_R8  9
-#define REG_R9  10
+#define REG_R8 9
+#define REG_R9 10
 #define REG_R10 11
 #define REG_R11 12
 #define REG_R12 13

@@ -1,6 +1,6 @@
+#include "common.h"
 #include <stdio.h>
 #include <string.h>
-#include "common.h"
 
 void print_tokens(struct TokenArray tokens, const char *input) {
   int i = 0;

@@ -50,7 +50,7 @@ static struct ASTNode *parse_program(struct Parser *parser) {
     } else if (!is_at_end(parser)) {
       struct Token *current_token = peek(parser);
       fprintf(stderr, "Error on line %d: Expected function declaration.\n",
-             current_token ? current_token->line : 0);
+              current_token ? current_token->line : 0);
       exit(1);
     }
   }
@@ -66,7 +66,7 @@ static struct ASTNode *parse_function_declaration(struct Parser *parser) {
   }
   struct Token *type_token = advance(parser);
   char *return_type = strndup(&parser->input[type_token->start],
-                           type_token->end - type_token->start);
+                              type_token->end - type_token->start);
 
   // Match function name (e.g., 'main')
   expect(parser, TOKEN_IDENTIFIER, "Expected function name.");
@@ -95,13 +95,16 @@ static struct ASTNode *parse_function_declaration(struct Parser *parser) {
       // Add parameter to array
       if (param_count >= param_capacity) {
         param_capacity = param_capacity == 0 ? 4 : param_capacity * 2;
-        parameters = realloc(parameters, param_capacity * sizeof(struct FunctionParameter));
+        parameters = realloc(parameters,
+                             param_capacity * sizeof(struct FunctionParameter));
       }
 
-      parameters[param_count].type = strndup(&parser->input[param_type_token->start],
-                                           param_type_token->end - param_type_token->start);
-      parameters[param_count].name = strndup(&parser->input[param_name_token->start],
-                                           param_name_token->end - param_name_token->start);
+      parameters[param_count].type =
+          strndup(&parser->input[param_type_token->start],
+                  param_type_token->end - param_type_token->start);
+      parameters[param_count].name =
+          strndup(&parser->input[param_name_token->start],
+                  param_name_token->end - param_name_token->start);
       param_count++;
     } while (match(parser, TOKEN_COMMA) && advance(parser));
   }
@@ -134,19 +137,19 @@ static struct ASTNode *parse_function_declaration(struct Parser *parser) {
 // Parse a statement
 static struct ASTNode *parse_statement(struct Parser *parser) {
   if (match(parser, TOKEN_WHILE)) {
-      advance(parser); // Consume 'while'
-      expect(parser, TOKEN_LEFT_PAREN, "Expected '(' after 'while'.");
-      struct ASTNode *condition = parse_expression(parser);
-      expect(parser, TOKEN_RIGHT_PAREN, "Expected ')' after while condition.");
-      expect(parser, TOKEN_LEFT_BRACE, "Expected '{' before while body.");
-      struct ASTNode *body = parse_block(parser);
-      expect(parser, TOKEN_RIGHT_BRACE, "Expected '}' after while body.");
-      struct ASTNode *node = malloc(sizeof(struct ASTNode));
-      node->type = NODE_WHILE_STATEMENT;
-      node->while_stmt.condition = condition;
-      node->while_stmt.body = body;
-      node->next = NULL;
-      return node;
+    advance(parser); // Consume 'while'
+    expect(parser, TOKEN_LEFT_PAREN, "Expected '(' after 'while'.");
+    struct ASTNode *condition = parse_expression(parser);
+    expect(parser, TOKEN_RIGHT_PAREN, "Expected ')' after while condition.");
+    expect(parser, TOKEN_LEFT_BRACE, "Expected '{' before while body.");
+    struct ASTNode *body = parse_block(parser);
+    expect(parser, TOKEN_RIGHT_BRACE, "Expected '}' after while body.");
+    struct ASTNode *node = malloc(sizeof(struct ASTNode));
+    node->type = NODE_WHILE_STATEMENT;
+    node->while_stmt.condition = condition;
+    node->while_stmt.body = body;
+    node->next = NULL;
+    return node;
   }
 
   // If statement
@@ -164,13 +167,13 @@ static struct ASTNode *parse_statement(struct Parser *parser) {
     if (match(parser, TOKEN_ELSE)) {
       advance(parser); // Consume 'else'
       if (match(parser, TOKEN_IF)) {
-         // "else if" chain: recursively parse the if-statement
-         else_body = parse_statement(parser);
+        // "else if" chain: recursively parse the if-statement
+        else_body = parse_statement(parser);
       } else {
-         // Regular else block: expect a block in braces
-         expect(parser, TOKEN_LEFT_BRACE, "Expected '{' after else.");
-         else_body = parse_block(parser);
-         expect(parser, TOKEN_RIGHT_BRACE, "Expected '}' after else body.");
+        // Regular else block: expect a block in braces
+        expect(parser, TOKEN_LEFT_BRACE, "Expected '{' after else.");
+        else_body = parse_block(parser);
+        expect(parser, TOKEN_RIGHT_BRACE, "Expected '}' after else body.");
       }
     }
 
@@ -195,13 +198,13 @@ static struct ASTNode *parse_statement(struct Parser *parser) {
       advance(parser); // Consume datatype
       struct Token *datatype_token = first_token;
       char *datatype = strndup(&parser->input[datatype_token->start],
-                             datatype_token->end - datatype_token->start);
+                               datatype_token->end - datatype_token->start);
 
       // Variable name
       expect(parser, TOKEN_IDENTIFIER, "Expected variable name.");
       struct Token *name_token = previous(parser);
       char *var_name = strndup(&parser->input[name_token->start],
-                             name_token->end - name_token->start);
+                               name_token->end - name_token->start);
 
       // Match '='
       expect(parser, TOKEN_EQUAL, "Expected '=' after variable name.");
@@ -223,11 +226,12 @@ static struct ASTNode *parse_statement(struct Parser *parser) {
 
       return node;
     } else if (parser->position + 1 < parser->tokens->count &&
-              parser->tokens->tokens[parser->position + 1].type == TOKEN_EQUAL) {
+               parser->tokens->tokens[parser->position + 1].type ==
+                   TOKEN_EQUAL) {
       // Assignment statement
       advance(parser); // Consume identifier
       char *var_name = strndup(&parser->input[first_token->start],
-                             first_token->end - first_token->start);
+                               first_token->end - first_token->start);
 
       // Match '='
       expect(parser, TOKEN_EQUAL, "Expected '=' after variable name.");
@@ -285,82 +289,82 @@ static struct ASTNode *parse_statement(struct Parser *parser) {
 
 // Modified expression parsing with proper precedence
 static struct ASTNode *parse_expression(struct Parser *parser) {
-    return parse_equality(parser);
+  return parse_equality(parser);
 }
 
 // Handles == and !=
 static struct ASTNode *parse_equality(struct Parser *parser) {
-    struct ASTNode *node = parse_additive(parser);
+  struct ASTNode *node = parse_additive(parser);
 
-    while (match(parser, TOKEN_EQUAL_EQUAL) || match(parser, TOKEN_NOT_EQUAL)) {
-        struct Token *op_token = advance(parser);
-        char *operator = strndup(&parser->input[op_token->start], 
-                               op_token->end - op_token->start);
+  while (match(parser, TOKEN_EQUAL_EQUAL) || match(parser, TOKEN_NOT_EQUAL)) {
+    struct Token *op_token = advance(parser);
+    char *operator= strndup(&parser->input[op_token->start],
+                            op_token->end - op_token->start);
 
-        struct ASTNode *right = parse_additive(parser);
+    struct ASTNode *right = parse_additive(parser);
 
-        struct ASTNode *bin_node = malloc(sizeof(struct ASTNode));
-        bin_node->type = NODE_BINARY_OPERATION;
-        bin_node->binary_op.operator = operator;
-        bin_node->binary_op.left = node;
-        bin_node->binary_op.right = right;
-        bin_node->next = NULL;
+    struct ASTNode *bin_node = malloc(sizeof(struct ASTNode));
+    bin_node->type = NODE_BINARY_OPERATION;
+    bin_node->binary_op.operator= operator;
+    bin_node->binary_op.left = node;
+    bin_node->binary_op.right = right;
+    bin_node->next = NULL;
 
-        node = bin_node;
-    }
-    return node;
+    node = bin_node;
+  }
+  return node;
 }
 
 // Renamed from original parse_expression
 static struct ASTNode *parse_additive(struct Parser *parser) {
-    struct ASTNode *node = parse_term(parser);
+  struct ASTNode *node = parse_term(parser);
 
-    while (match(parser, TOKEN_PLUS) || match(parser, TOKEN_MINUS)) {
-        struct Token *op_token = advance(parser);
-        char operator = parser->input[op_token->start];
+  while (match(parser, TOKEN_PLUS) || match(parser, TOKEN_MINUS)) {
+    struct Token *op_token = advance(parser);
+    char operator= parser->input[op_token->start];
 
-        struct ASTNode *right = parse_term(parser);
+    struct ASTNode *right = parse_term(parser);
 
-        struct ASTNode *bin_node = malloc(sizeof(struct ASTNode));
-        bin_node->type = NODE_BINARY_OPERATION;
-        bin_node->binary_op.operator = strndup(&operator, 1);
-        bin_node->binary_op.left = node;
-        bin_node->binary_op.right = right;
-        bin_node->next = NULL;
+    struct ASTNode *bin_node = malloc(sizeof(struct ASTNode));
+    bin_node->type = NODE_BINARY_OPERATION;
+    bin_node->binary_op.operator= strndup(&operator, 1);
+    bin_node->binary_op.left = node;
+    bin_node->binary_op.right = right;
+    bin_node->next = NULL;
 
-        node = bin_node;
-    }
+    node = bin_node;
+  }
 
-    return node;
+  return node;
 }
 
 // Parse a term (handles *, /)
 static struct ASTNode *parse_term(struct Parser *parser) {
-    struct ASTNode *node = parse_factor(parser);
+  struct ASTNode *node = parse_factor(parser);
 
-    while (match(parser, TOKEN_MULTIPLY) || match(parser, TOKEN_DIVIDE)) {
-        struct Token *op_token = advance(parser);
-        char operator = parser->input[op_token->start];
+  while (match(parser, TOKEN_MULTIPLY) || match(parser, TOKEN_DIVIDE)) {
+    struct Token *op_token = advance(parser);
+    char operator= parser->input[op_token->start];
 
-        struct ASTNode *right = parse_factor(parser);
+    struct ASTNode *right = parse_factor(parser);
 
-        // Create binary operation node
-        struct ASTNode *bin_node = malloc(sizeof(struct ASTNode));
-        bin_node->type = NODE_BINARY_OPERATION;
-        bin_node->binary_op.operator = strndup(&operator, 1);
-        bin_node->binary_op.left = node;
-        bin_node->binary_op.right = right;
-        bin_node->next = NULL;
+    // Create binary operation node
+    struct ASTNode *bin_node = malloc(sizeof(struct ASTNode));
+    bin_node->type = NODE_BINARY_OPERATION;
+    bin_node->binary_op.operator= strndup(&operator, 1);
+    bin_node->binary_op.left = node;
+    bin_node->binary_op.right = right;
+    bin_node->next = NULL;
 
-        node = bin_node;
-    }
+    node = bin_node;
+  }
 
-    return node;
+  return node;
 }
 
 // Parse a factor (primary expressions)
 static struct ASTNode *parse_factor(struct Parser *parser) {
-    return parse_primary(parser);
+  return parse_primary(parser);
 }
 
 // Parse primary expressions
@@ -426,8 +430,9 @@ static struct ASTNode *parse_primary(struct Parser *parser) {
     }
   } else {
     struct Token *current_token = peek(parser);
-    fprintf(stderr, "Error on line %d: Unexpected token in primary expression.\n",
-           current_token ? current_token->line : 0);
+    fprintf(stderr,
+            "Error on line %d: Unexpected token in primary expression.\n",
+            current_token ? current_token->line : 0);
     exit(1);
   }
 }
@@ -464,7 +469,8 @@ static void expect(struct Parser *parser, int token_type, const char *message) {
     advance(parser);
   } else {
     struct Token *current = peek(parser);
-    fprintf(stderr, "Error on line %d: %s\n", current ? current->line : 0, message);
+    fprintf(stderr, "Error on line %d: %s\n", current ? current->line : 0,
+            message);
     exit(1);
   }
 }
@@ -531,21 +537,21 @@ static struct ASTNode *parse_arguments(struct Parser *parser) {
 }
 
 static struct ASTNode *parse_block(struct Parser *parser) {
-    struct ASTNode *body = NULL;
-    struct ASTNode **current = &body;
+  struct ASTNode *body = NULL;
+  struct ASTNode **current = &body;
 
-    while (!is_at_end(parser) && !match(parser, TOKEN_RIGHT_BRACE)) {
-        struct ASTNode *stmt = parse_statement(parser);
-        if (stmt) {
-            *current = stmt;
-            current = &((*current)->next);
-        } else {
-            struct Token *current_token = peek(parser);
-            fprintf(stderr, "Error on line %d: Invalid statement in block.\n",
-                   current_token ? current_token->line : 0);
-            exit(1);
-        }
+  while (!is_at_end(parser) && !match(parser, TOKEN_RIGHT_BRACE)) {
+    struct ASTNode *stmt = parse_statement(parser);
+    if (stmt) {
+      *current = stmt;
+      current = &((*current)->next);
+    } else {
+      struct Token *current_token = peek(parser);
+      fprintf(stderr, "Error on line %d: Invalid statement in block.\n",
+              current_token ? current_token->line : 0);
+      exit(1);
     }
+  }
 
-    return body;
+  return body;
 }

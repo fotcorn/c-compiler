@@ -37,7 +37,8 @@ void add_define(struct DefineArray *arr, const char *name, int start, int end) {
   arr->count++;
 }
 
-int get_define_start_end(struct DefineArray *arr, const char *name, int len, int *start, int *end) {
+int get_define_start_end(struct DefineArray *arr, const char *name, int len,
+                         int *start, int *end) {
   for (int i = 0; i < arr->count; i++) {
     if (strncmp(arr->defines[i].name, name, len) == 0) {
       *start = arr->defines[i].start;
@@ -152,17 +153,18 @@ int lex(char *input, int length, struct TokenArray *tokens) {
         continue;
       } else if (input[i + 1] == '*') {
         // Multi-line comment
-        i += 2;  // Skip /*
+        i += 2; // Skip /*
         while (i + 1 < length && !(input[i] == '*' && input[i + 1] == '/')) {
           if (input[i] == '\n')
             line++;
           i++;
         }
         if (i + 1 >= length) {
-          fprintf(stderr, "Line %d: Error: Unterminated multi-line comment\n", line);
+          fprintf(stderr, "Line %d: Error: Unterminated multi-line comment\n",
+                  line);
           return 1;
         }
-        i += 2;  // Skip */
+        i += 2; // Skip */
         continue;
       }
     }
@@ -230,8 +232,9 @@ int lex(char *input, int length, struct TokenArray *tokens) {
         token.type = TOKEN_NOT_EQUAL;
         i++;
       } else {
-        fprintf(stderr, "Line %d: Error: Expected '=' after '!' at position %d\n", line,
-               i);
+        fprintf(stderr,
+                "Line %d: Error: Expected '=' after '!' at position %d\n", line,
+                i);
         return 1;
       }
     } else if (input[i] == '<') {
@@ -256,8 +259,9 @@ int lex(char *input, int length, struct TokenArray *tokens) {
         token.type = TOKEN_LOGICAL_OR;
         i++;
       } else {
-        fprintf(stderr, "Line %d: Error: Expected '|' after '|' at position %d\n", line,
-               i);
+        fprintf(stderr,
+                "Line %d: Error: Expected '|' after '|' at position %d\n", line,
+                i);
         return 1;
       }
     } else if (input[i] == '&') {
@@ -285,8 +289,8 @@ int lex(char *input, int length, struct TokenArray *tokens) {
       if (i < length && input[i] == '"') {
         i++;
       } else {
-        fprintf(stderr, "Line %d: Error: Unterminated string at position %d\n", line,
-               token.start);
+        fprintf(stderr, "Line %d: Error: Unterminated string at position %d\n",
+                line, token.start);
         return 1;
       }
     }
@@ -333,7 +337,8 @@ int lex(char *input, int length, struct TokenArray *tokens) {
         token.type = TOKEN_WHILE;
       } else if (strncmp(&input[token.start], "struct", len) == 0 && len == 6) {
         token.type = TOKEN_STRUCT;
-      } else if (get_define_start_end(&defines, &input[token.start], len, &token.start, &token.end)) {
+      } else if (get_define_start_end(&defines, &input[token.start], len,
+                                      &token.start, &token.end)) {
         token.type = TOKEN_LITERAL_INT;
       } else {
         token.type = TOKEN_IDENTIFIER;
@@ -341,8 +346,9 @@ int lex(char *input, int length, struct TokenArray *tokens) {
     }
     // Unexpected characters
     else {
-      fprintf(stderr, "Line %d: Error: Unexpected character '%c' at position %d\n", line,
-             input[i], i);
+      fprintf(stderr,
+              "Line %d: Error: Unexpected character '%c' at position %d\n",
+              line, input[i], i);
       return 1;
     }
 
