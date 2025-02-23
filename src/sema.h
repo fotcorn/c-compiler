@@ -120,6 +120,28 @@ void analyze_node(struct ASTNode *node, struct SemanticContext *context) {
     analyze_variable_declaration(node, context);
   } else if (node->type == NODE_RETURN_STATEMENT) {
     analyze_expression(node->return_stmt.value, context);
+  } else if (node->type == NODE_IF_STATEMENT) {
+    // Analyze the if condition
+    analyze_expression(node->if_stmt.condition, context);
+    // Save current stack offset before analyzing the 'if' body
+    int saved_offset = context->current_stack_offset;
+    analyze_node(node->if_stmt.body, context);
+    // Restore stack offset after the 'if' body
+    context->current_stack_offset = saved_offset;
+    // Analyze else body if it exists
+    if (node->if_stmt.else_body) {
+      saved_offset = context->current_stack_offset;
+      analyze_node(node->if_stmt.else_body, context);
+      context->current_stack_offset = saved_offset;
+    }
+  } else if (node->type == NODE_WHILE_STATEMENT) {
+    // Analyze the while condition
+    analyze_expression(node->while_stmt.condition, context);
+    // Save current stack offset before analyzing the while body
+    int saved_offset = context->current_stack_offset;
+    analyze_node(node->while_stmt.body, context);
+    // Restore stack offset after the while body
+    context->current_stack_offset = saved_offset;
   } else if (node->type == NODE_FUNCTION_CALL ||
              node->type == NODE_BINARY_OPERATION ||
              node->type == NODE_INTEGER_LITERAL ||
