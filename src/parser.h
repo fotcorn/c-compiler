@@ -133,20 +133,28 @@ static struct ASTNode *parse_function_declaration(struct Parser *parser) {
 
 // Parse a statement
 static struct ASTNode *parse_statement(struct Parser *parser) {
+  if (match(parser, TOKEN_WHILE)) {
+      advance(parser); // Consume 'while'
+      expect(parser, TOKEN_LEFT_PAREN, "Expected '(' after 'while'.");
+      struct ASTNode *condition = parse_expression(parser);
+      expect(parser, TOKEN_RIGHT_PAREN, "Expected ')' after while condition.");
+      expect(parser, TOKEN_LEFT_BRACE, "Expected '{' before while body.");
+      struct ASTNode *body = parse_block(parser);
+      expect(parser, TOKEN_RIGHT_BRACE, "Expected '}' after while body.");
+      struct ASTNode *node = malloc(sizeof(struct ASTNode));
+      node->type = NODE_WHILE_STATEMENT;
+      node->while_stmt.condition = condition;
+      node->while_stmt.body = body;
+      node->next = NULL;
+      return node;
+  }
+
   // If statement
   if (match(parser, TOKEN_IF)) {
     advance(parser); // Consume 'if'
-    
-    // Expect '('
     expect(parser, TOKEN_LEFT_PAREN, "Expected '(' after 'if'.");
-    
-    // Parse condition
     struct ASTNode *condition = parse_expression(parser);
-    
-    // Expect ')'
     expect(parser, TOKEN_RIGHT_PAREN, "Expected ')' after if condition.");
-    
-    // Parse body block
     expect(parser, TOKEN_LEFT_BRACE, "Expected '{' after if condition.");
     struct ASTNode *body = parse_block(parser);
     expect(parser, TOKEN_RIGHT_BRACE, "Expected '}' after if body.");

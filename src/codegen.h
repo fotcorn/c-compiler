@@ -486,6 +486,60 @@ static int generate_block(struct Section *text, struct ASTNode *block, struct Sy
                 break;
             }
 
+            case NODE_WHILE_STATEMENT: {
+                static int while_counter = 0;
+                char start_label[32];
+                char end_label[32];
+                snprintf(start_label, sizeof(start_label), ".Lwhile_start%d", while_counter);
+                snprintf(end_label, sizeof(end_label), ".Lwhile_end%d", while_counter);
+                while_counter++;
+
+                /* Place start label */
+                struct Instruction *start_instr = malloc(sizeof(struct Instruction));
+                start_instr->type = INSTR_LABEL;
+                start_instr->op1.type = OPERAND_LABEL;
+                start_instr->op1.label = strdup(start_label);
+                start_instr->next = NULL;
+                if (text->instructions) {
+                    struct Instruction *last = text->instructions;
+                    while (last->next) last = last->next;
+                    last->next = start_instr;
+                } else {
+                    text->instructions = start_instr;
+                }
+            
+                /* Evaluate condition */
+                struct CodegenContext ctx_cond;
+                init_codegen_context(&ctx_cond);
+                int cond_reg = generate_expression(text, block->while_stmt.condition, func, assembly, &ctx_cond);
+                add_instruction(text, INSTR_CMP, imm_operand(0), reg_operand(cond_reg));
+                free_register(&ctx_cond, cond_reg);
+                
+                /* Jump to end if condition is false */
+                add_instruction(text, INSTR_JE, label_operand(end_label), empty_operand());
+
+                /* Generate while loop body */
+                generate_block(text, block->while_stmt.body, func, assembly);
+
+                /* Jump back to start label */
+                add_instruction(text, INSTR_JMP, label_operand(start_label), empty_operand());
+
+                /* Place end label */
+                struct Instruction *end_instr = malloc(sizeof(struct Instruction));
+                end_instr->type = INSTR_LABEL;
+                end_instr->op1.type = OPERAND_LABEL;
+                end_instr->op1.label = strdup(end_label);
+                end_instr->next = NULL;
+                if (text->instructions) {
+                    struct Instruction *last = text->instructions;
+                    while (last->next) last = last->next;
+                    last->next = end_instr;
+                } else {
+                    text->instructions = end_instr;
+                }
+                break;
+            }
+
             default:
                 // For expressions (assignments, function calls, binary ops, etc.)
                 generate_expression(text, block, func, assembly, &ctx_stmt);
