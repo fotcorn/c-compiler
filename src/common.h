@@ -106,6 +106,7 @@ struct ASTNode {
     // Identifier
     struct {
       char *name;
+      int stack_offset;
     } identifier;
 
     // Function call

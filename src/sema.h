@@ -10,6 +10,11 @@ void analyze_function_declaration(struct ASTNode *node,
 void analyze_variable_declaration(struct ASTNode *node,
                                   struct SemanticContext *context);
 void analyze_expression(struct ASTNode *node, struct SemanticContext *context);
+void analyze_block(struct ASTNode *node, struct SemanticContext *context);
+void analyze_if_statement(struct ASTNode *node,
+                          struct SemanticContext *context);
+void analyze_while_statement(struct ASTNode *node,
+                             struct SemanticContext *context);
 
 // Create a new symbol table
 struct SymbolTable *create_symbol_table(void) {
@@ -121,32 +126,40 @@ void analyze_node(struct ASTNode *node, struct SemanticContext *context) {
   } else if (node->type == NODE_RETURN_STATEMENT) {
     analyze_expression(node->return_stmt.value, context);
   } else if (node->type == NODE_IF_STATEMENT) {
-    // Analyze the if condition
-    analyze_expression(node->if_stmt.condition, context);
-    // Save current stack offset before analyzing the 'if' body
-    int saved_offset = context->current_stack_offset;
-    analyze_node(node->if_stmt.body, context);
-    // Restore stack offset after the 'if' body
-    context->current_stack_offset = saved_offset;
-    // Analyze else body if it exists
-    if (node->if_stmt.else_body) {
-      saved_offset = context->current_stack_offset;
-      analyze_node(node->if_stmt.else_body, context);
-      context->current_stack_offset = saved_offset;
-    }
+    analyze_if_statement(node, context);
   } else if (node->type == NODE_WHILE_STATEMENT) {
-    // Analyze the while condition
-    analyze_expression(node->while_stmt.condition, context);
-    // Save current stack offset before analyzing the while body
-    int saved_offset = context->current_stack_offset;
-    analyze_node(node->while_stmt.body, context);
-    // Restore stack offset after the while body
-    context->current_stack_offset = saved_offset;
+    analyze_while_statement(node, context);
+  } else if (node->type == NODE_ASSIGNMENT) {
+    // For assignments, analyze the target identifier first
+    if (node->assignment.target->type == NODE_IDENTIFIER) {
+      struct Symbol *sym = lookup_symbol(
+          context->current_scope, node->assignment.target->identifier.name);
+      if (!sym) {
+        fprintf(stderr, "Error: Assignment to undefined variable %s\n",
+                node->assignment.target->identifier.name);
+        context->had_error = 1;
+      } else if (sym->type == SYMBOL_VARIABLE) {
+        // Store the stack offset in the target identifier node
+        node->assignment.target->identifier.stack_offset = sym->variable.offset;
+      }
+    }
+
+    // Then analyze the value expression
+    analyze_expression(node->assignment.value, context);
   } else if (node->type == NODE_FUNCTION_CALL ||
              node->type == NODE_BINARY_OPERATION ||
              node->type == NODE_INTEGER_LITERAL ||
              node->type == NODE_IDENTIFIER) {
     analyze_expression(node, context);
+  }
+}
+
+// Analyze a block of statements
+void analyze_block(struct ASTNode *node, struct SemanticContext *context) {
+  struct ASTNode *current = node;
+  while (current) {
+    analyze_node(current, context);
+    current = current->next;
   }
 }
 
@@ -242,6 +255,9 @@ void analyze_expression(struct ASTNode *node, struct SemanticContext *context) {
     if (!sym) {
       fprintf(stderr, "Error: Undefined variable %s\n", node->identifier.name);
       context->had_error = 1;
+    } else if (sym->type == SYMBOL_VARIABLE) {
+      // Store the stack offset in the AST node for code generation
+      node->identifier.stack_offset = sym->variable.offset;
     }
   } else if (node->type == NODE_FUNCTION_CALL) {
     struct Symbol *sym =
@@ -257,6 +273,92 @@ void analyze_expression(struct ASTNode *node, struct SemanticContext *context) {
       analyze_expression(arg, context);
       arg = arg->next;
     }
+  } else if (node->type == NODE_ASSIGNMENT) {
+    // For assignments, analyze the target identifier first
+    if (node->assignment.target->type == NODE_IDENTIFIER) {
+      struct Symbol *sym = lookup_symbol(
+          context->current_scope, node->assignment.target->identifier.name);
+      if (!sym) {
+        fprintf(stderr, "Error: Assignment to undefined variable %s\n",
+                node->assignment.target->identifier.name);
+        context->had_error = 1;
+      } else if (sym->type == SYMBOL_VARIABLE) {
+        // Store the stack offset in the target identifier node
+        node->assignment.target->identifier.stack_offset = sym->variable.offset;
+      }
+    }
+
+    // Then analyze the value expression
+    analyze_expression(node->assignment.value, context);
+  }
+}
+
+// Analyze a while statement
+void analyze_while_statement(struct ASTNode *node,
+                             struct SemanticContext *context) {
+  // Analyze the while condition in the current scope
+  analyze_expression(node->while_stmt.condition, context);
+
+  // Create a new scope for while body
+  struct SymbolTable *while_scope = create_symbol_table();
+  while_scope->parent = context->current_scope;
+
+  // Save current scope and enter while scope
+  struct SymbolTable *prev_scope = context->current_scope;
+  context->current_scope = while_scope;
+
+  // Save current stack offset
+  int saved_offset = context->current_stack_offset;
+
+  // Analyze the while body
+  analyze_block(node->while_stmt.body, context);
+
+  // Restore scope and offset
+  context->current_scope = prev_scope;
+  context->current_stack_offset = saved_offset;
+}
+
+// Analyze an if statement
+void analyze_if_statement(struct ASTNode *node,
+                          struct SemanticContext *context) {
+  // Analyze the if condition in the current scope
+  analyze_expression(node->if_stmt.condition, context);
+
+  // Create a new scope for 'if' body
+  struct SymbolTable *if_scope = create_symbol_table();
+  if_scope->parent = context->current_scope;
+
+  // Save current scope and enter if scope
+  struct SymbolTable *prev_scope = context->current_scope;
+  context->current_scope = if_scope;
+
+  // Save current stack offset
+  int saved_offset = context->current_stack_offset;
+
+  // Analyze the 'if' body
+  analyze_block(node->if_stmt.body, context);
+
+  // Restore scope and offset
+  context->current_scope = prev_scope;
+  context->current_stack_offset = saved_offset;
+
+  // Handle else body
+  if (node->if_stmt.else_body) {
+    // Create a new scope for 'else' body
+    struct SymbolTable *else_scope = create_symbol_table();
+    else_scope->parent = context->current_scope;
+
+    // Enter else scope
+    context->current_scope = else_scope;
+    context->current_stack_offset =
+        saved_offset; // Reset to the same offset as before the if
+
+    // Analyze the 'else' body
+    analyze_block(node->if_stmt.else_body, context);
+
+    // Restore scope and offset
+    context->current_scope = prev_scope;
+    context->current_stack_offset = saved_offset;
   }
 }
 

@@ -176,20 +176,12 @@ static int generate_expression(struct Section *text, struct ASTNode *node,
 
   // Identifier
   else if (node->type == NODE_IDENTIFIER) {
-    struct Symbol *var =
-        lookup_symbol(func->function.locals, node->identifier.name);
-    // If not found here, might be in global or parent scope, etc.
-    if (var) {
-      int r = allocate_register(ctx);
-      add_instruction(text, INSTR_MOV,
-                      mem_operand(REG_RBP, var->variable.offset),
-                      reg_operand(r));
-      return r;
-    }
-    // fallback error
-    fprintf(stderr, "generate_expression: unknown identifier '%s'\n",
-            node->identifier.name);
-    exit(1);
+    // Use the stack offset stored in the AST node during semantic analysis
+    int r = allocate_register(ctx);
+    add_instruction(text, INSTR_MOV,
+                    mem_operand(REG_RBP, node->identifier.stack_offset),
+                    reg_operand(r));
+    return r;
   }
 
   // String literal
@@ -391,16 +383,14 @@ static int generate_expression(struct Section *text, struct ASTNode *node,
 
     // target must be an identifier
     if (node->assignment.target->type == NODE_IDENTIFIER) {
-      struct Symbol *var = lookup_symbol(
-          func->function.locals, node->assignment.target->identifier.name);
-      if (!var) {
-        fprintf(stderr, "Assignment to unknown variable '%s'\n",
-                node->assignment.target->identifier.name);
-        exit(1);
-      }
-      // store it
-      add_instruction(text, INSTR_MOV, reg_operand(value_reg),
-                      mem_operand(REG_RBP, var->variable.offset));
+      // Use the stack offset stored in the identifier node
+      add_instruction(
+          text, INSTR_MOV, reg_operand(value_reg),
+          mem_operand(REG_RBP,
+                      node->assignment.target->identifier.stack_offset));
+    } else {
+      fprintf(stderr, "Assignment to non-identifier is not supported\n");
+      exit(1);
     }
     free_register(ctx, value_reg);
 
@@ -409,6 +399,32 @@ static int generate_expression(struct Section *text, struct ASTNode *node,
 
   fprintf(stderr, "generate_expression: unhandled node type %d\n", node->type);
   exit(1);
+}
+
+// Forward declaration of generate_block
+static int generate_block(struct Section *text, struct ASTNode *block,
+                          struct Symbol *func, struct Assembly *assembly);
+
+// Helper function to output code for an assignment
+static void generate_assignment(struct Section *text, struct ASTNode *target,
+                                struct ASTNode *value, struct Symbol *func,
+                                struct Assembly *assembly,
+                                struct CodegenContext *ctx) {
+  // Evaluate the right-hand side
+  int value_reg = generate_expression(text, value, func, assembly, ctx);
+
+  // Handle different kinds of targets
+  if (target->type == NODE_IDENTIFIER) {
+    // Use the stack offset stored directly in the identifier node
+    add_instruction(text, INSTR_MOV, reg_operand(value_reg),
+                    mem_operand(REG_RBP, target->identifier.stack_offset));
+  } else {
+    fprintf(stderr, "Assignment to non-identifier is not supported\n");
+    exit(1);
+  }
+
+  // Free the register used for the value
+  free_register(ctx, value_reg);
 }
 
 // Returns 1 if the block contains a return statement that terminates the block.
@@ -423,12 +439,17 @@ static int generate_block(struct Section *text, struct ASTNode *block,
       if (block->var_decl.value) {
         int reg = generate_expression(text, block->var_decl.value, func,
                                       assembly, &ctx_stmt);
-        struct Symbol *var =
-            lookup_symbol(func->function.locals, block->var_decl.name);
+        // Use stored stack offset from var_decl directly
         add_instruction(text, INSTR_MOV, reg_operand(reg),
-                        mem_operand(REG_RBP, var->variable.offset));
+                        mem_operand(REG_RBP, block->var_decl.stack_offset));
         free_register(&ctx_stmt, reg);
       }
+      break;
+
+    case NODE_ASSIGNMENT:
+      // Use the helper function for assignments
+      generate_assignment(text, block->assignment.target,
+                          block->assignment.value, func, assembly, &ctx_stmt);
       break;
 
     case NODE_RETURN_STATEMENT: {

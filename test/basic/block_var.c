@@ -9,8 +9,10 @@ int main() {
         int y = 10;
         // CHECK: if: y = 10
         printf("if: y = %d\n", y);
+    } else {
+        int y = 20;
+        printf("else: y = %d\n", y);
     }
-
 
     // CHECK: while: z = 6
     // CHECK: while: z = 4
